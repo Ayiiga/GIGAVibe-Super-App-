@@ -1,0 +1,8 @@
+{
+  "name": "GIGAVibe Super App",
+  "description": "Founded by Ayiiga Benard Issaka, GIGA (Intelligent Global Arena) is the world’s first AI-driven Super-App designed to unify how we communicate, create, and transact.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
