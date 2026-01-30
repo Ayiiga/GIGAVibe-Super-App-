@@ -69,6 +69,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete, installPrompt }) =>
     { id: 'create', title: 'Create', icon: Sparkles, desc: 'Share videos and earn payouts', color: 'bg-blue-600' },
     { id: 'shop', title: 'Shop', icon: ShoppingBag, desc: 'Discover unique global products', color: 'bg-purple-600' },
     { id: 'chat', title: 'Chat', icon: MessageCircle, desc: 'Connect with your community', color: 'bg-green-600' },
+    { id: 'business', title: 'Business', icon: Star, desc: 'Verify business to sell safely', color: 'bg-yellow-600' },
   ];
 
   if (step === 1) {

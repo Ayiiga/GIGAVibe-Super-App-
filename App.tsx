@@ -12,6 +12,9 @@ import Profile from './components/Profile';
 import Auth from './components/Auth';
 import NotificationSystem from './components/NotificationSystem';
 import { Search, Bell, Smartphone, Radio, ShieldCheck } from 'lucide-react';
+import BusinessVerification from './components/BusinessVerification';
+import CreatorStudio from './components/CreatorStudio';
+import { appState, UserRole } from './services/appState';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>(TabType.SOCIAL);
@@ -26,6 +29,10 @@ const App: React.FC = () => {
   const [isOnboarded, setIsOnboarded] = useState<boolean>(() => {
     return localStorage.getItem('gigavibe_onboarded') === 'true';
   });
+
+  const [role, setRole] = useState<UserRole | null>(() => appState.getRole());
+  const [showBusinessVerification, setShowBusinessVerification] = useState(false);
+  const [showCreatorStudio, setShowCreatorStudio] = useState(false);
 
   // Remix State
   const [remixContext, setRemixContext] = useState<{ url: string; type: 'image' | 'video'; username: string } | null>(null);
@@ -76,16 +83,50 @@ const App: React.FC = () => {
     setIsAuthenticated(true);
   };
 
+  const handleOnboardingComplete = (selectedRole: string) => {
+    // Persist onboarding completion + role selection
+    localStorage.setItem('gigavibe_onboarded', 'true');
+    if (selectedRole === 'create' || selectedRole === 'shop' || selectedRole === 'chat' || selectedRole === 'business') {
+      appState.setRole(selectedRole);
+      setRole(selectedRole);
+    }
+    setIsOnboarded(true);
+  };
+
   const handleRemix = (context: { url: string; type: 'image' | 'video'; username: string }) => {
     setRemixContext(context);
     setActiveTab(TabType.AI_LAB);
+  };
+
+  const publishToFeed = (payload: { url: string; mediaType: 'image' | 'video' | 'audio'; postType: 'post' | 'short' | 'story'; caption: string }) => {
+    // SocialFeed will read this from localStorage and listen for the custom event.
+    const existingRaw = localStorage.getItem('gigavibe_social_posts');
+    const existing = existingRaw ? (() => { try { return JSON.parse(existingRaw) as any[]; } catch { return []; } })() : [];
+    const newItem = {
+      id: Date.now().toString(),
+      username: '@ayiiga_benard',
+      avatar: 'https://picsum.photos/seed/user1/200',
+      contentUrl: payload.url,
+      caption: payload.caption,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      mediaType: payload.mediaType,
+      postType: payload.postType,
+      isLiked: false,
+      isFollowing: false,
+      isBoostedPost: false,
+      commentList: []
+    };
+    localStorage.setItem('gigavibe_social_posts', JSON.stringify([newItem, ...existing]));
+    window.dispatchEvent(new CustomEvent('gigavibe_posts_updated'));
   };
 
   const renderContent = () => {
     switch (activeTab) {
       case TabType.SOCIAL: return <SocialFeed onRemix={handleRemix} onShop={() => setActiveTab(TabType.MARKETPLACE)} />;
       case TabType.CHATS: return <ChatInterface />;
-      case TabType.MARKETPLACE: return <Marketplace />;
+      case TabType.MARKETPLACE: return <Marketplace onOpenBusinessVerification={() => setShowBusinessVerification(true)} />;
       case TabType.AI_LAB: return <AILab remixSource={remixContext} onClearRemix={() => setRemixContext(null)} />;
       case TabType.WALLET: return <Wallet />;
       default: return <SocialFeed />;
@@ -97,7 +138,7 @@ const App: React.FC = () => {
   }
 
   if (!isOnboarded) {
-    return <Onboarding onComplete={() => setIsOnboarded(true)} installPrompt={installPrompt} />;
+    return <Onboarding onComplete={handleOnboardingComplete} installPrompt={installPrompt} />;
   }
 
   return (
@@ -109,6 +150,24 @@ const App: React.FC = () => {
           onClose={() => setShowProfile(false)} 
           onNavigate={setActiveTab} 
           installPrompt={installPrompt} 
+          onOpenBusinessVerification={() => setShowBusinessVerification(true)}
+          onOpenCreatorStudio={() => setShowCreatorStudio(true)}
+          role={role}
+        />
+      )}
+
+      {showBusinessVerification && (
+        <BusinessVerification onClose={() => setShowBusinessVerification(false)} />
+      )}
+
+      {showCreatorStudio && (
+        <CreatorStudio
+          onClose={() => setShowCreatorStudio(false)}
+          onPublishToFeed={(p) => {
+            publishToFeed(p);
+            setShowCreatorStudio(false);
+            setActiveTab(TabType.SOCIAL);
+          }}
         />
       )}
 

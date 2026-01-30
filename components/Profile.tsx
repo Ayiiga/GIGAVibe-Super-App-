@@ -14,6 +14,9 @@ interface ProfileProps {
   onClose: () => void;
   onNavigate: (tab: TabType) => void;
   installPrompt: any;
+  onOpenBusinessVerification: () => void;
+  onOpenCreatorStudio: () => void;
+  role?: string | null;
 }
 
 const MOCK_FOLLOWERS = [
@@ -24,7 +27,7 @@ const MOCK_FOLLOWERS = [
   { id: '5', name: 'Yaw Frimpong', username: '@yaw_tech', avatar: 'https://picsum.photos/seed/p5/100', isFollowing: false },
 ];
 
-const Profile: React.FC<ProfileProps> = ({ onClose, onNavigate, installPrompt }) => {
+const Profile: React.FC<ProfileProps> = ({ onClose, onNavigate, installPrompt, onOpenBusinessVerification, onOpenCreatorStudio, role }) => {
   const [currentView, setCurrentView] = useState<'main' | 'settings' | 'followers' | 'following'>('main');
   const [isInstalled, setIsInstalled] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
@@ -332,6 +335,42 @@ const Profile: React.FC<ProfileProps> = ({ onClose, onNavigate, installPrompt })
                     <p className="text-[9px] text-gray-500 uppercase font-bold">Earnings</p>
                  </div>
               </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-8">
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenCreatorStudio();
+                    }}
+                    className="bg-gradient-to-br from-blue-600/20 to-purple-600/10 border border-white/10 rounded-[2.5rem] p-6 text-left shadow-xl hover:bg-white/10 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400">
+                        <Sparkles size={18} />
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Creator Studio</span>
+                    </div>
+                    <p className="font-black text-sm">Upload media</p>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Photos • Videos • Shorts • Stories • Audio</p>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenBusinessVerification();
+                    }}
+                    className="bg-gradient-to-br from-yellow-600/20 to-orange-600/10 border border-white/10 rounded-[2.5rem] p-6 text-left shadow-xl hover:bg-white/10 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 rounded-xl bg-yellow-500/10 text-yellow-400">
+                        <ShieldCheck size={18} />
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Business</span>
+                    </div>
+                    <p className="font-black text-sm">Verify to sell</p>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">{role === 'business' ? 'Business node active' : 'Anti-fraud verification'}</p>
+                  </button>
+                </div>
 
               <button 
                 onClick={() => { onClose(); onNavigate(TabType.MARKETPLACE); }}
