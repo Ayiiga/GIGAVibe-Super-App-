@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Transaction } from '../types';
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { ArrowUpRight, ArrowDownLeft, DollarSign, Wallet as WalletIcon, Zap, TrendingUp, ChevronRight, Info, Lock, Fingerprint, ShieldCheck, Loader2, Delete, Mail, Smartphone, ArrowLeft, KeyRound, User, Send, CheckCircle, X, Shield, Scan } from 'lucide-react';
+import { appState } from '../services/appState';
 
 const MOCK_DATA = [
   { name: 'Mon', earnings: 400 },
@@ -20,6 +21,16 @@ const Wallet: React.FC = () => {
   const [isShaking, setIsShaking] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'success'>('idle');
+  const [storedPin, setStoredPin] = useState<string | null>(() => appState.getWalletPin());
+  const [pinSetupStep, setPinSetupStep] = useState<'idle' | 'create' | 'confirm'>(() => (appState.getWalletPin() ? 'idle' : 'create'));
+  const [pinCreate, setPinCreate] = useState('');
+  const [pinConfirm, setPinConfirm] = useState('');
+
+  // Change PIN State
+  const [showChangePin, setShowChangePin] = useState(false);
+  const [changeCurrentPin, setChangeCurrentPin] = useState('');
+  const [changeNewPin, setChangeNewPin] = useState('');
+  const [changeConfirmPin, setChangeConfirmPin] = useState('');
   
   // Withdrawal State
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -43,7 +54,8 @@ const Wallet: React.FC = () => {
       
       if (newPin.length === 4) {
         setTimeout(() => {
-          if (newPin === '1234') {
+          const actual = storedPin;
+          if (actual && newPin === actual) {
             setIsLocked(false);
             setPin('');
           } else {
@@ -130,6 +142,8 @@ const Wallet: React.FC = () => {
 
   const handleResetComplete = () => {
       if (newPinEntry.length === 4) {
+        appState.setWalletPin(newPinEntry);
+        setStoredPin(newPinEntry);
         alert("PIN Updated Successfully! ✅");
         setForgotPinStep('idle');
         setPin('');
@@ -141,7 +155,116 @@ const Wallet: React.FC = () => {
       }
   };
 
+  const completePinSetup = () => {
+    if (pinCreate.length !== 4 || !/^\d{4}$/.test(pinCreate)) {
+      alert('Please enter a 4-digit PIN.');
+      return;
+    }
+    if (pinConfirm !== pinCreate) {
+      alert('PINs do not match.');
+      return;
+    }
+    appState.setWalletPin(pinCreate);
+    setStoredPin(pinCreate);
+    setPinSetupStep('idle');
+    setPinCreate('');
+    setPinConfirm('');
+    setIsLocked(false);
+  };
+
+  const submitPinCreate = () => {
+    if (pinCreate.length !== 4 || !/^\d{4}$/.test(pinCreate)) {
+      alert('Please enter a 4-digit PIN.');
+      return;
+    }
+    setPinSetupStep('confirm');
+  };
+
+  const submitChangePin = () => {
+    if (!storedPin) return;
+    if (changeCurrentPin !== storedPin) {
+      alert('Current PIN is incorrect.');
+      return;
+    }
+    if (!/^\d{4}$/.test(changeNewPin)) {
+      alert('New PIN must be 4 digits.');
+      return;
+    }
+    if (changeNewPin !== changeConfirmPin) {
+      alert('New PINs do not match.');
+      return;
+    }
+    appState.setWalletPin(changeNewPin);
+    setStoredPin(changeNewPin);
+    setShowChangePin(false);
+    setChangeCurrentPin('');
+    setChangeNewPin('');
+    setChangeConfirmPin('');
+    alert('PIN changed successfully ✅');
+  };
+
   if (isLocked) {
+    if (pinSetupStep !== 'idle') {
+      return (
+        <div className="h-full bg-black flex flex-col items-center justify-center p-8 relative z-50 animate-in fade-in slide-in-from-bottom-4">
+          <div className="w-20 h-20 bg-blue-600/20 rounded-full flex items-center justify-center mb-6">
+            <Lock size={40} className="text-blue-500" />
+          </div>
+          <h2 className="text-2xl font-black mb-2">
+            {pinSetupStep === 'create' ? 'Create Wallet PIN 🔐' : 'Confirm PIN ✅'}
+          </h2>
+          <p className="text-gray-400 mb-8 text-center text-sm max-w-xs">
+            New wallet users must set an individual 4-digit PIN before accessing funds.
+          </p>
+
+          {pinSetupStep === 'create' ? (
+            <>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={pinCreate}
+                onChange={(e) => setPinCreate(e.target.value.replace(/[^\d]/g, '').slice(0, 4))}
+                placeholder="••••"
+                className="bg-white/5 border border-white/10 text-center text-3xl tracking-[0.5em] font-black rounded-2xl p-4 w-full max-w-xs mb-6 focus:border-blue-500 outline-none transition-colors"
+                autoFocus
+              />
+              <button onClick={submitPinCreate} className="w-full max-w-xs bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-500 transition-colors">
+                Continue ➡️
+              </button>
+            </>
+          ) : (
+            <>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={pinConfirm}
+                onChange={(e) => setPinConfirm(e.target.value.replace(/[^\d]/g, '').slice(0, 4))}
+                placeholder="••••"
+                className="bg-white/5 border border-white/10 text-center text-3xl tracking-[0.5em] font-black rounded-2xl p-4 w-full max-w-xs mb-6 focus:border-blue-500 outline-none transition-colors"
+                autoFocus
+              />
+              <div className="w-full max-w-xs flex gap-3">
+                <button
+                  onClick={() => {
+                    setPinSetupStep('create');
+                    setPinConfirm('');
+                  }}
+                  className="flex-1 bg-white/10 border border-white/10 text-white font-black py-4 rounded-xl"
+                >
+                  Back
+                </button>
+                <button onClick={completePinSetup} className="flex-1 bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg">
+                  Set PIN 🚀
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
     if (forgotPinStep !== 'idle') {
       return (
         <div className="h-full bg-black flex flex-col items-center justify-center p-8 relative z-50 animate-in fade-in slide-in-from-bottom-4">
@@ -365,6 +488,22 @@ const Wallet: React.FC = () => {
         </div>
       </div>
 
+      {/* Wallet PIN Management */}
+      <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6 mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-sm font-black uppercase tracking-widest text-gray-400">Wallet Security 🔐</h4>
+          <button
+            onClick={() => setShowChangePin(true)}
+            className="px-4 py-2 bg-white text-black rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-transform"
+          >
+            Change PIN
+          </button>
+        </div>
+        <p className="text-xs text-gray-400 leading-relaxed">
+          Your wallet uses a device-stored 4-digit PIN. Change it anytime to keep your funds secure.
+        </p>
+      </div>
+
       {/* Payout Transparency Breakdown */}
       <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6 mb-8">
         <div className="flex items-center justify-between mb-4">
@@ -565,6 +704,65 @@ const Wallet: React.FC = () => {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Change PIN Modal */}
+      {showChangePin && (
+        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-3xl p-6 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black">Change Wallet PIN</h3>
+              <button
+                onClick={() => {
+                  setShowChangePin(false);
+                  setChangeCurrentPin('');
+                  setChangeNewPin('');
+                  setChangeConfirmPin('');
+                }}
+                className="p-2 bg-white/5 rounded-full"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={changeCurrentPin}
+                onChange={(e) => setChangeCurrentPin(e.target.value.replace(/[^\d]/g, '').slice(0, 4))}
+                placeholder="Current PIN"
+                className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-center text-xl font-black tracking-[0.4em] focus:border-blue-500 outline-none"
+              />
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={changeNewPin}
+                onChange={(e) => setChangeNewPin(e.target.value.replace(/[^\d]/g, '').slice(0, 4))}
+                placeholder="New PIN"
+                className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-center text-xl font-black tracking-[0.4em] focus:border-blue-500 outline-none"
+              />
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={changeConfirmPin}
+                onChange={(e) => setChangeConfirmPin(e.target.value.replace(/[^\d]/g, '').slice(0, 4))}
+                placeholder="Confirm New PIN"
+                className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-center text-xl font-black tracking-[0.4em] focus:border-blue-500 outline-none"
+              />
+            </div>
+
+            <button
+              onClick={submitChangePin}
+              className="w-full mt-6 bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-transform"
+            >
+              Update PIN ✅
+            </button>
           </div>
         </div>
       )}
