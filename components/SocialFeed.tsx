@@ -31,9 +31,17 @@ interface Comment {
 interface SocialPost extends Post {
   hasProduct?: boolean;
   isVideo?: boolean;
+  mediaType?: 'image' | 'video' | 'audio';
+  postType?: 'post' | 'short' | 'story';
   isLiked: boolean;
   isFollowing: boolean;
   isBoostedPost?: boolean;
+  boost?: {
+    perDay: number;
+    days: number;
+    total: number;
+    until: string;
+  };
   commentList: Comment[];
 }
 
@@ -51,6 +59,8 @@ const INITIAL_POSTS: SocialPost[] = [
     shares: 1200,
     hasProduct: true,
     isVideo: false,
+    mediaType: 'image',
+    postType: 'post',
     isLiked: false,
     isFollowing: false,
     isBoostedPost: true,
@@ -70,6 +80,8 @@ const INITIAL_POSTS: SocialPost[] = [
     shares: 300,
     hasProduct: true,
     isVideo: false,
+    mediaType: 'image',
+    postType: 'post',
     isLiked: true,
     isFollowing: true,
     commentList: [
@@ -82,12 +94,14 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
   const [posts, setPosts] = useState<SocialPost[]>(INITIAL_POSTS);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
-  const [previewMedia, setPreviewMedia] = useState<{ url: string, type: 'image' | 'video' } | null>(null);
+  const [previewMedia, setPreviewMedia] = useState<{ url: string; mediaType: 'image' | 'video' | 'audio' } | null>(null);
   const [caption, setCaption] = useState('');
+  const [uploadPostType, setUploadPostType] = useState<'post' | 'short' | 'story'>('post');
   const [isLive, setIsLive] = useState(false);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [showBoostModal, setShowBoostModal] = useState<string | null>(null);
-  const [boostBudget, setBoostBudget] = useState(25);
+  const [boostBudget, setBoostBudget] = useState(10);
+  const [boostDays, setBoostDays] = useState(3);
   const [newCommentText, setNewCommentText] = useState('');
   const [showCamera, setShowCamera] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState<string | null>(null); 
@@ -131,6 +145,37 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
     };
   }, [showCamera]);
 
+  // Load any externally-published posts (e.g. Creator Studio)
+  useEffect(() => {
+    const load = () => {
+      const raw = localStorage.getItem('gigavibe_social_posts');
+      if (!raw) return;
+      try {
+        const stored = JSON.parse(raw) as SocialPost[];
+        if (!Array.isArray(stored) || stored.length === 0) return;
+        setPosts((prev) => {
+          const seen = new Set(prev.map((p) => p.id));
+          const merged = [...stored.filter((p) => p && p.id && !seen.has(p.id)), ...prev];
+          return merged;
+        });
+      } catch {
+        // ignore malformed local state
+      }
+    };
+
+    load();
+    const onCustom = () => load();
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'gigavibe_social_posts') load();
+    };
+    window.addEventListener('gigavibe_posts_updated', onCustom as any);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('gigavibe_posts_updated', onCustom as any);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
   const showFeedback = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
@@ -144,7 +189,7 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
         canvasRef.current.height = videoRef.current.videoHeight;
         ctx.drawImage(videoRef.current, 0, 0);
         const dataUrl = canvasRef.current.toDataURL('image/jpeg');
-        setPreviewMedia({ url: dataUrl, type: 'image' });
+        setPreviewMedia({ url: dataUrl, mediaType: 'image' });
         setShowCamera(false);
         setShowUpload(true);
       }
@@ -162,12 +207,22 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
       likes: 0,
       comments: 0,
       shares: 0,
-      isVideo: previewMedia.type === 'video',
+      isVideo: previewMedia.mediaType === 'video',
+      mediaType: previewMedia.mediaType,
+      postType: uploadPostType,
       isLiked: false,
       isFollowing: false,
       commentList: []
     };
     setPosts([newPost, ...posts]);
+    try {
+      const existingRaw = localStorage.getItem('gigavibe_social_posts');
+      const existing = existingRaw ? (JSON.parse(existingRaw) as SocialPost[]) : [];
+      localStorage.setItem('gigavibe_social_posts', JSON.stringify([newPost, ...(Array.isArray(existing) ? existing : [])]));
+      window.dispatchEvent(new CustomEvent('gigavibe_posts_updated'));
+    } catch {
+      // ignore
+    }
     setShowUpload(false);
     setPreviewMedia(null);
     setCaption('');
@@ -213,8 +268,10 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
   };
 
   const handleBoostSubmit = () => {
-    setPosts(prev => prev.map(p => p.id === showBoostModal ? { ...p, isBoostedPost: true } : p));
-    showFeedback(`Post Boosted! Estimated reach: ${(boostBudget * 125).toLocaleString()} vibes 🚀`);
+    const total = boostBudget * boostDays;
+    const until = new Date(Date.now() + boostDays * 24 * 60 * 60 * 1000).toISOString();
+    setPosts(prev => prev.map(p => p.id === showBoostModal ? { ...p, isBoostedPost: true, boost: { perDay: boostBudget, days: boostDays, total, until } } : p));
+    showFeedback(`Boost active! $${total} total • ${boostDays} day(s) 🚀`);
     setShowBoostModal(null);
   };
 
@@ -264,7 +321,24 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
         <div className="h-full w-full overflow-y-scroll snap-y snap-mandatory no-scrollbar">
           {posts.map((post) => (
             <div key={post.id} className="h-full w-full snap-start relative flex flex-col justify-end">
-              <img src={post.contentUrl} className="absolute inset-0 w-full h-full object-cover z-0" alt="content" />
+              {((post.mediaType || (post.isVideo ? 'video' : 'image')) === 'video') && (
+                <video
+                  src={post.contentUrl}
+                  className="absolute inset-0 w-full h-full object-cover z-0"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                />
+              )}
+              {((post.mediaType || (post.isVideo ? 'video' : 'image')) === 'image') && (
+                <img src={post.contentUrl} className="absolute inset-0 w-full h-full object-cover z-0" alt="content" />
+              )}
+              {(post.mediaType === 'audio') && (
+                <div className="absolute inset-0 w-full h-full z-0 bg-gradient-to-br from-zinc-900 via-black to-blue-900">
+                  <div className="absolute inset-0 opacity-40" style={{ backgroundImage: `radial-gradient(circle at 20% 20%, rgba(59,130,246,0.35), transparent 50%), radial-gradient(circle at 80% 60%, rgba(168,85,247,0.25), transparent 55%)` }} />
+                </div>
+              )}
               {/* Stronger gradient for visibility */}
               <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-black/10 z-10" />
               
@@ -287,7 +361,11 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
                   <span className="text-[10px] font-black uppercase tracking-tighter drop-shadow-md">Boost</span>
                 </button>
 
-                <button onClick={() => onRemix?.({ url: post.contentUrl, type: post.isVideo ? 'video' : 'image', username: post.username })} className="flex flex-col items-center gap-1 group">
+                <button
+                  disabled={post.mediaType === 'audio'}
+                  onClick={() => onRemix?.({ url: post.contentUrl, type: (post.mediaType === 'video' || post.isVideo) ? 'video' : 'image', username: post.username })}
+                  className={`flex flex-col items-center gap-1 group ${post.mediaType === 'audio' ? 'opacity-40' : ''}`}
+                >
                   <div className="p-1.5 bg-blue-600/40 rounded-full group-active:scale-90 transition-transform">
                     <RefreshCw size={24} className="text-blue-400" />
                   </div>
@@ -317,6 +395,11 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
                       </h3>
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] text-white/70 font-black uppercase tracking-tighter drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">GIGA Creator</span>
+                        {post.postType && post.postType !== 'post' && (
+                          <div className="flex items-center gap-1 bg-white/10 border border-white/15 px-2 py-0.5 rounded-full">
+                            <span className="text-[8px] font-black uppercase text-white/80">{post.postType}</span>
+                          </div>
+                        )}
                         {post.isBoostedPost && (
                           <div className="flex items-center gap-1 bg-yellow-500/20 border border-yellow-500/50 px-2 py-0.5 rounded-full">
                             <Zap size={8} className="text-yellow-400 fill-yellow-400" />
@@ -327,6 +410,16 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
                     </div>
                   </div>
                   <p className="text-sm text-gray-100 font-medium leading-snug drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] line-clamp-3 mb-3">{post.caption}</p>
+
+                  {post.mediaType === 'audio' && (
+                    <div className="bg-white/10 border border-white/15 rounded-2xl p-4 mb-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Disc size={14} className="text-blue-400" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-300">Audio</span>
+                      </div>
+                      <audio src={post.contentUrl} controls className="w-full" />
+                    </div>
+                  )}
                   
                   {/* Shop Product Tag */}
                   {post.hasProduct && (
@@ -365,26 +458,39 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
                <div className="space-y-6 mb-10">
                   <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
                      <div className="flex justify-between items-center mb-4">
-                        <span className="text-sm font-bold text-gray-400">Ad Budget (GH₵)</span>
-                        <span className="text-2xl font-black text-white">GH₵ {boostBudget}</span>
+                        <span className="text-sm font-bold text-gray-400">Budget / day ($)</span>
+                        <span className="text-2xl font-black text-white">${boostBudget}</span>
                      </div>
                      <input 
                        type="range" 
-                       min="5" 
-                       max="500" 
-                       step="5"
+                       min="1" 
+                       max="100" 
+                       step="1"
                        value={boostBudget}
                        onChange={(e) => setBoostBudget(parseInt(e.target.value))}
                        className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-yellow-500"
                      />
+                     <div className="mt-6 flex justify-between items-center mb-4">
+                        <span className="text-sm font-bold text-gray-400">Days</span>
+                        <span className="text-2xl font-black text-white">{boostDays}</span>
+                     </div>
+                     <input
+                       type="range"
+                       min="1"
+                       max="30"
+                       step="1"
+                       value={boostDays}
+                       onChange={(e) => setBoostDays(parseInt(e.target.value))}
+                       className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                     />
                      <div className="flex justify-between mt-4">
                         <div className="text-center flex-1 border-r border-white/5">
-                           <p className="text-xl font-black text-blue-400">{(boostBudget * 125).toLocaleString()}</p>
+                           <p className="text-xl font-black text-blue-400">{(boostBudget * boostDays * 125).toLocaleString()}</p>
                            <p className="text-[8px] text-gray-500 uppercase font-black">Est. Reach</p>
                         </div>
                         <div className="text-center flex-1">
-                           <p className="text-xl font-black text-purple-400">3 Days</p>
-                           <p className="text-[8px] text-gray-500 uppercase font-black">Duration</p>
+                           <p className="text-xl font-black text-purple-400">${(boostBudget * boostDays).toLocaleString()}</p>
+                           <p className="text-[8px] text-gray-500 uppercase font-black">Total Spend</p>
                         </div>
                      </div>
                   </div>
@@ -459,12 +565,13 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
         </div>
       )}
       
-      <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={e => {
+      <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*" onChange={e => {
         const f = e.target.files?.[0];
         if (f) {
           const r = new FileReader();
           r.onloadend = () => {
-            setPreviewMedia({ url: r.result as string, type: f.type.startsWith('video') ? 'video' : 'image' });
+            const mediaType: 'image' | 'video' | 'audio' = f.type.startsWith('video') ? 'video' : (f.type.startsWith('audio') ? 'audio' : 'image');
+            setPreviewMedia({ url: r.result as string, mediaType });
             setShowUpload(true);
           };
           r.readAsDataURL(f);
@@ -481,8 +588,36 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
           </div>
           <div className="flex-1 p-6 space-y-6 overflow-y-auto no-scrollbar pb-32">
              <div className="relative rounded-[2.5rem] overflow-hidden aspect-[3/4] border border-white/10 shadow-2xl">
-                <img src={previewMedia.url} className="w-full h-full object-cover" alt="Preview" />
-                <button onClick={() => setShowCamera(true)} className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-6 py-2 rounded-full font-black text-xs flex items-center gap-2 text-white"><RefreshCcw size={14} /> Retake</button>
+                {previewMedia.mediaType === 'image' && <img src={previewMedia.url} className="w-full h-full object-cover" alt="Preview" />}
+                {previewMedia.mediaType === 'video' && <video src={previewMedia.url} className="w-full h-full object-cover" autoPlay loop muted playsInline controls />}
+                {previewMedia.mediaType === 'audio' && (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-zinc-900 via-black to-blue-900 p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Disc size={18} className="text-blue-400" />
+                      <span className="text-[10px] font-black uppercase tracking-widest text-gray-300">Audio</span>
+                    </div>
+                    <audio src={previewMedia.url} controls className="w-full" />
+                  </div>
+                )}
+                {previewMedia.mediaType !== 'audio' && (
+                  <button onClick={() => setShowCamera(true)} className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-6 py-2 rounded-full font-black text-xs flex items-center gap-2 text-white"><RefreshCcw size={14} /> Retake</button>
+                )}
+             </div>
+             <div className="bg-white/5 border border-white/10 rounded-[2rem] p-4 flex items-center justify-between">
+               <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Post type</span>
+               <div className="flex gap-2">
+                 {(['post', 'short', 'story'] as const).map((t) => (
+                   <button
+                     key={t}
+                     onClick={() => setUploadPostType(t)}
+                     className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${
+                       uploadPostType === t ? 'bg-white text-black' : 'bg-white/10 text-white'
+                     }`}
+                   >
+                     {t}
+                   </button>
+                 ))}
+               </div>
              </div>
              <textarea 
                value={caption}
