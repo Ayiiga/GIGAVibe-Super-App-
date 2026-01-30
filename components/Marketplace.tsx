@@ -93,7 +93,8 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onOpenBusinessVerification })
     setIsGeneratingDesc(false);
   };
 
-  const businessStatus = appState.getBusinessStatus();
+  const getBusinessStatus = () => appState.getBusinessStatus();
+  const businessStatus = getBusinessStatus();
 
   const activeOrder = useMemo(() => {
     if (!activeTrackingOrderId) return null;
@@ -202,7 +203,7 @@ const Marketplace: React.FC<MarketplaceProps> = ({ onOpenBusinessVerification })
             </button>
             <button 
               onClick={() => {
-                if (businessStatus !== 'verified') {
+                if (getBusinessStatus() !== 'verified') {
                   setShowVerifyGate(true);
                   return;
                 }
