@@ -30,12 +30,16 @@ interface Comment {
 
 interface SocialPost extends Post {
   hasProduct?: boolean;
-  isVideo?: boolean;
+  mediaType: MediaType;
+  format: PostFormat;
   isLiked: boolean;
   isFollowing: boolean;
   isBoostedPost?: boolean;
   commentList: Comment[];
 }
+
+type MediaType = 'image' | 'video' | 'audio';
+type PostFormat = 'post' | 'story' | 'short';
 
 const QUICK_EMOJIS = ['❤️', '🔥', '👏', '😂', '💯', '✨', '🙌', '😮', '🚀', '😍', '✅'];
 
@@ -50,7 +54,8 @@ const INITIAL_POSTS: SocialPost[] = [
     comments: 2,
     shares: 1200,
     hasProduct: true,
-    isVideo: false,
+    mediaType: 'image',
+    format: 'post',
     isLiked: false,
     isFollowing: false,
     isBoostedPost: true,
@@ -69,12 +74,66 @@ const INITIAL_POSTS: SocialPost[] = [
     comments: 1,
     shares: 300,
     hasProduct: true,
-    isVideo: false,
+    mediaType: 'image',
+    format: 'post',
     isLiked: true,
     isFollowing: true,
     commentList: [
       { id: 'c3', username: '@style_queen', avatar: 'https://picsum.photos/seed/user5/100', text: 'The quality of these fabrics is top tier! 😍', timestamp: '30m ago', likes: 24 }
     ]
+  },
+  {
+    id: '3',
+    username: '@sonic_canvas',
+    avatar: 'https://picsum.photos/seed/user6/100',
+    contentUrl: 'https://assets.mixkit.co/music/preview/mixkit-sun-and-his-daughter-580.mp3',
+    caption: 'Dropped a new ambient loop for visual artists. 🎧✨',
+    likes: 5600,
+    comments: 1,
+    shares: 620,
+    hasProduct: false,
+    mediaType: 'audio',
+    format: 'post',
+    isLiked: false,
+    isFollowing: false,
+    commentList: [
+      { id: 'c4', username: '@texture_lab', avatar: 'https://picsum.photos/seed/user9/100', text: 'This soundscape is pure gold. 🌌', timestamp: '45m ago', likes: 9 }
+    ]
+  },
+  {
+    id: '4',
+    username: '@motion_short',
+    avatar: 'https://picsum.photos/seed/user7/100',
+    contentUrl: 'https://assets.mixkit.co/videos/preview/mixkit-dancer-practicing-on-the-street-1340-large.mp4',
+    caption: 'Quick choreography cut from today\'s rehearsal. #shorts',
+    likes: 9800,
+    comments: 2,
+    shares: 900,
+    hasProduct: false,
+    mediaType: 'video',
+    format: 'short',
+    isLiked: true,
+    isFollowing: false,
+    commentList: [
+      { id: 'c5', username: '@beat_lab', avatar: 'https://picsum.photos/seed/user10/100', text: 'The rhythm is 🔥', timestamp: '1h ago', likes: 17 },
+      { id: 'c6', username: '@moves_daily', avatar: 'https://picsum.photos/seed/user11/100', text: 'Post the full routine!', timestamp: '20m ago', likes: 6 }
+    ]
+  },
+  {
+    id: '5',
+    username: '@studio_story',
+    avatar: 'https://picsum.photos/seed/user8/100',
+    contentUrl: 'https://picsum.photos/seed/story/400/800',
+    caption: 'Story: behind the brush strokes today ✍️',
+    likes: 4200,
+    comments: 0,
+    shares: 160,
+    hasProduct: false,
+    mediaType: 'image',
+    format: 'story',
+    isLiked: false,
+    isFollowing: false,
+    commentList: []
   }
 ];
 
@@ -82,12 +141,15 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
   const [posts, setPosts] = useState<SocialPost[]>(INITIAL_POSTS);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
-  const [previewMedia, setPreviewMedia] = useState<{ url: string, type: 'image' | 'video' } | null>(null);
+  const [previewMedia, setPreviewMedia] = useState<{ url: string; mediaType: MediaType } | null>(null);
+  const [postFormat, setPostFormat] = useState<PostFormat>('post');
+  const [pendingMediaType, setPendingMediaType] = useState<MediaType | null>(null);
   const [caption, setCaption] = useState('');
   const [isLive, setIsLive] = useState(false);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [showBoostModal, setShowBoostModal] = useState<string | null>(null);
-  const [boostBudget, setBoostBudget] = useState(25);
+  const [boostBudget, setBoostBudget] = useState(10);
+  const [boostDays, setBoostDays] = useState(3);
   const [newCommentText, setNewCommentText] = useState('');
   const [showCamera, setShowCamera] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState<string | null>(null); 
@@ -144,7 +206,9 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
         canvasRef.current.height = videoRef.current.videoHeight;
         ctx.drawImage(videoRef.current, 0, 0);
         const dataUrl = canvasRef.current.toDataURL('image/jpeg');
-        setPreviewMedia({ url: dataUrl, type: 'image' });
+        setPreviewMedia({ url: dataUrl, mediaType: 'image' });
+        setPostFormat('post');
+        setPendingMediaType(null);
         setShowCamera(false);
         setShowUpload(true);
       }
@@ -162,7 +226,8 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
       likes: 0,
       comments: 0,
       shares: 0,
-      isVideo: previewMedia.type === 'video',
+      mediaType: previewMedia.mediaType,
+      format: postFormat,
       isLiked: false,
       isFollowing: false,
       commentList: []
@@ -171,6 +236,8 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
     setShowUpload(false);
     setPreviewMedia(null);
     setCaption('');
+    setPostFormat('post');
+    setPendingMediaType(null);
     showFeedback("Vibe Posted Successfully! 🚀");
   };
 
@@ -214,8 +281,15 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
 
   const handleBoostSubmit = () => {
     setPosts(prev => prev.map(p => p.id === showBoostModal ? { ...p, isBoostedPost: true } : p));
-    showFeedback(`Post Boosted! Estimated reach: ${(boostBudget * 125).toLocaleString()} vibes 🚀`);
+    const estimatedReach = boostBudget * boostDays * 140;
+    showFeedback(`Post Boosted for ${boostDays} day${boostDays === 1 ? '' : 's'}! Est. reach: ${estimatedReach.toLocaleString()} vibes 🚀`);
     setShowBoostModal(null);
+  };
+
+  const openFilePicker = (format: PostFormat, mediaTypeHint?: MediaType) => {
+    setPostFormat(format);
+    setPendingMediaType(mediaTypeHint || null);
+    fileInputRef.current?.click();
   };
 
   const handleShareAction = (platform: string, postId: string) => {
@@ -231,11 +305,12 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
       case 'Download':
         const link = document.createElement('a');
         link.href = post.contentUrl;
-        link.download = `GIGAVibe_${post.id}.jpg`;
+        const fileExtension = post.mediaType === 'video' ? 'mp4' : post.mediaType === 'audio' ? 'mp3' : 'jpg';
+        link.download = `GIGAVibe_${post.id}.${fileExtension}`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        showFeedback("Saved to device gallery! 💾");
+        showFeedback("Saved to your device! 💾");
         break;
       default:
         showFeedback(`${platform} share coming soon! 🔜`);
@@ -243,11 +318,56 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
     setShowShareSheet(null);
   };
 
+  const handleRemixClick = (post: SocialPost) => {
+    if (post.mediaType === 'audio') {
+      showFeedback('Audio remix suite is coming soon 🎧');
+      return;
+    }
+    onRemix?.({ url: post.contentUrl, type: post.mediaType === 'video' ? 'video' : 'image', username: post.username });
+  };
+
+  const renderPostMedia = (post: SocialPost) => {
+    if (post.mediaType === 'video') {
+      return (
+        <video
+          src={post.contentUrl}
+          className="absolute inset-0 w-full h-full object-cover z-0"
+          autoPlay
+          loop
+          muted
+          playsInline
+        />
+      );
+    }
+
+    if (post.mediaType === 'audio') {
+      return (
+        <div className="absolute inset-0 w-full h-full z-0 bg-gradient-to-br from-blue-900 via-black to-purple-900">
+          <div className="absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.4),transparent_60%)]" />
+          <div className="relative z-10 h-full w-full flex flex-col items-center justify-center text-center px-8">
+            <div className="p-4 bg-white/10 rounded-2xl border border-white/10 mb-4">
+              <Music2 size={36} className="text-blue-200" />
+            </div>
+            <p className="text-[10px] uppercase tracking-[0.35em] text-blue-200/70 font-black mb-3">Audio Vibe</p>
+            <audio controls src={post.contentUrl} className="w-full max-w-sm">
+              Your browser does not support audio playback.
+            </audio>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <img src={post.contentUrl} className="absolute inset-0 w-full h-full object-cover z-0" alt="content" />
+    );
+  };
+
   if (isLive) {
     return <LiveHost onClose={() => setIsLive(false)} />;
   }
 
   const activePost = posts.find(p => p.id === activeCommentId);
+  const estimatedReach = boostBudget * boostDays * 140;
 
   return (
     <div className="h-full w-full relative bg-black flex flex-col">
@@ -264,9 +384,9 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
         <div className="h-full w-full overflow-y-scroll snap-y snap-mandatory no-scrollbar">
           {posts.map((post) => (
             <div key={post.id} className="h-full w-full snap-start relative flex flex-col justify-end">
-              <img src={post.contentUrl} className="absolute inset-0 w-full h-full object-cover z-0" alt="content" />
+              {renderPostMedia(post)}
               {/* Stronger gradient for visibility */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-black/10 z-10" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-black/10 z-10 pointer-events-none" />
               
               {/* Interaction Sidebar - Moved up slightly for navbar clearance */}
               <div className="absolute right-4 bottom-56 z-20 flex flex-col gap-5 items-center bg-black/40 backdrop-blur-2xl p-3.5 rounded-full border border-white/10 shadow-2xl">
@@ -287,7 +407,7 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
                   <span className="text-[10px] font-black uppercase tracking-tighter drop-shadow-md">Boost</span>
                 </button>
 
-                <button onClick={() => onRemix?.({ url: post.contentUrl, type: post.isVideo ? 'video' : 'image', username: post.username })} className="flex flex-col items-center gap-1 group">
+                <button onClick={() => handleRemixClick(post)} className={`flex flex-col items-center gap-1 group ${post.mediaType === 'audio' ? 'opacity-60' : ''}`}>
                   <div className="p-1.5 bg-blue-600/40 rounded-full group-active:scale-90 transition-transform">
                     <RefreshCw size={24} className="text-blue-400" />
                   </div>
@@ -317,6 +437,17 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
                       </h3>
                       <div className="flex items-center gap-2">
                         <span className="text-[10px] text-white/70 font-black uppercase tracking-tighter drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">GIGA Creator</span>
+                        {post.format !== 'post' && (
+                          <div className="flex items-center gap-1 bg-white/10 border border-white/20 px-2 py-0.5 rounded-full">
+                            <span className="text-[8px] font-black uppercase text-white/80">{post.format === 'story' ? 'Story' : 'Short'}</span>
+                          </div>
+                        )}
+                        {post.mediaType === 'audio' && (
+                          <div className="flex items-center gap-1 bg-blue-500/20 border border-blue-500/40 px-2 py-0.5 rounded-full">
+                            <Music2 size={8} className="text-blue-300" />
+                            <span className="text-[8px] font-black uppercase text-blue-200">Audio</span>
+                          </div>
+                        )}
                         {post.isBoostedPost && (
                           <div className="flex items-center gap-1 bg-yellow-500/20 border border-yellow-500/50 px-2 py-0.5 rounded-full">
                             <Zap size={8} className="text-yellow-400 fill-yellow-400" />
@@ -363,28 +494,45 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
                </div>
 
                <div className="space-y-6 mb-10">
-                  <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
-                     <div className="flex justify-between items-center mb-4">
-                        <span className="text-sm font-bold text-gray-400">Ad Budget (GH₵)</span>
-                        <span className="text-2xl font-black text-white">GH₵ {boostBudget}</span>
+                  <div className="bg-white/5 p-6 rounded-3xl border border-white/5 space-y-6">
+                     <div>
+                       <div className="flex justify-between items-center mb-4">
+                          <span className="text-sm font-bold text-gray-400">Boost Budget (USD)</span>
+                          <span className="text-2xl font-black text-white">$ {boostBudget}</span>
+                       </div>
+                       <input 
+                         type="range" 
+                         min="1" 
+                         max="100" 
+                         step="1"
+                         value={boostBudget}
+                         onChange={(e) => setBoostBudget(parseInt(e.target.value))}
+                         className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                       />
                      </div>
-                     <input 
-                       type="range" 
-                       min="5" 
-                       max="500" 
-                       step="5"
-                       value={boostBudget}
-                       onChange={(e) => setBoostBudget(parseInt(e.target.value))}
-                       className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-yellow-500"
-                     />
-                     <div className="flex justify-between mt-4">
+                     <div>
+                       <div className="flex justify-between items-center mb-4">
+                          <span className="text-sm font-bold text-gray-400">Duration (Days)</span>
+                          <span className="text-2xl font-black text-white">{boostDays}</span>
+                       </div>
+                       <input 
+                         type="range" 
+                         min="1" 
+                         max="30" 
+                         step="1"
+                         value={boostDays}
+                         onChange={(e) => setBoostDays(parseInt(e.target.value))}
+                         className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                       />
+                     </div>
+                     <div className="flex justify-between">
                         <div className="text-center flex-1 border-r border-white/5">
-                           <p className="text-xl font-black text-blue-400">{(boostBudget * 125).toLocaleString()}</p>
+                           <p className="text-xl font-black text-blue-400">{estimatedReach.toLocaleString()}</p>
                            <p className="text-[8px] text-gray-500 uppercase font-black">Est. Reach</p>
                         </div>
                         <div className="text-center flex-1">
-                           <p className="text-xl font-black text-purple-400">3 Days</p>
-                           <p className="text-[8px] text-gray-500 uppercase font-black">Duration</p>
+                           <p className="text-xl font-black text-purple-400">$ {(boostBudget * boostDays).toLocaleString()}</p>
+                           <p className="text-[8px] text-gray-500 uppercase font-black">Total Spend</p>
                         </div>
                      </div>
                   </div>
@@ -424,14 +572,29 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
               <Radio size={24} className="animate-pulse" />
            </button>
            
-           <button onClick={() => { setShowCamera(true); setIsMenuOpen(false); }} className="bg-white/10 backdrop-blur-2xl text-white p-5 rounded-full shadow-2xl flex items-center gap-3 active:scale-90 transition-transform border border-white/20">
+           <button onClick={() => { setPostFormat('post'); setShowCamera(true); setIsMenuOpen(false); }} className="bg-white/10 backdrop-blur-2xl text-white p-5 rounded-full shadow-2xl flex items-center gap-3 active:scale-90 transition-transform border border-white/20">
               <span className="text-[11px] font-black uppercase tracking-widest mr-1">Camera 📸</span>
               <Video size={24}/>
            </button>
            
-           <button onClick={() => { fileInputRef.current?.click(); setIsMenuOpen(false); }} className="bg-purple-600 text-white p-5 rounded-full shadow-2xl flex items-center gap-3 active:scale-90 transition-transform border border-purple-400/20">
+           <button onClick={() => { openFilePicker('post'); setIsMenuOpen(false); }} className="bg-purple-600 text-white p-5 rounded-full shadow-2xl flex items-center gap-3 active:scale-90 transition-transform border border-purple-400/20">
               <span className="text-[11px] font-black uppercase tracking-widest mr-1">Gallery 📁</span>
               <Upload size={24}/>
+           </button>
+
+           <button onClick={() => { openFilePicker('story'); setIsMenuOpen(false); }} className="bg-blue-600/80 text-white p-5 rounded-full shadow-2xl flex items-center gap-3 active:scale-90 transition-transform border border-blue-400/20">
+              <span className="text-[11px] font-black uppercase tracking-widest mr-1">Story ✨</span>
+              <ImagePlus size={24}/>
+           </button>
+
+           <button onClick={() => { openFilePicker('short', 'video'); setIsMenuOpen(false); }} className="bg-black/70 text-white p-5 rounded-full shadow-2xl flex items-center gap-3 active:scale-90 transition-transform border border-white/20">
+              <span className="text-[11px] font-black uppercase tracking-widest mr-1">Shorts ▶️</span>
+              <Play size={24}/>
+           </button>
+
+           <button onClick={() => { openFilePicker('post', 'audio'); setIsMenuOpen(false); }} className="bg-indigo-600 text-white p-5 rounded-full shadow-2xl flex items-center gap-3 active:scale-90 transition-transform border border-indigo-400/20">
+              <span className="text-[11px] font-black uppercase tracking-widest mr-1">Audio 🎧</span>
+              <Music2 size={24}/>
            </button>
         </div>
       )}
@@ -459,13 +622,21 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
         </div>
       )}
       
-      <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={e => {
+      <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*" onChange={e => {
         const f = e.target.files?.[0];
         if (f) {
+          const mediaType: MediaType = f.type.startsWith('video') ? 'video' : f.type.startsWith('audio') ? 'audio' : 'image';
+          if (pendingMediaType && mediaType !== pendingMediaType) {
+            showFeedback(`Please select a ${pendingMediaType} file.`);
+            setPendingMediaType(null);
+            e.target.value = '';
+            return;
+          }
           const r = new FileReader();
           r.onloadend = () => {
-            setPreviewMedia({ url: r.result as string, type: f.type.startsWith('video') ? 'video' : 'image' });
+            setPreviewMedia({ url: r.result as string, mediaType });
             setShowUpload(true);
+            setPendingMediaType(null);
           };
           r.readAsDataURL(f);
         }
@@ -475,19 +646,66 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
       {showUpload && previewMedia && (
         <div className="fixed inset-0 z-[2000] bg-black animate-in slide-in-from-bottom duration-300 flex flex-col">
           <div className="p-6 pt-12 flex justify-between items-center border-b border-white/10">
-             <button onClick={() => { setShowUpload(false); setPreviewMedia(null); }} className="p-2 bg-white/5 rounded-full"><X size={20}/></button>
+             <button onClick={() => { setShowUpload(false); setPreviewMedia(null); setPostFormat('post'); setPendingMediaType(null); }} className="p-2 bg-white/5 rounded-full"><X size={20}/></button>
              <h3 className="font-black italic tracking-tighter text-white">New GIGAVibe ✨</h3>
              <button onClick={handlePostSubmit} className="bg-blue-600 px-6 py-2 rounded-full font-black text-sm shadow-lg shadow-blue-900/40 text-white">Post 🚀</button>
           </div>
           <div className="flex-1 p-6 space-y-6 overflow-y-auto no-scrollbar pb-32">
+             <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-full">
+                  <span className="text-[9px] text-gray-400 font-black uppercase tracking-[0.2em]">Publish As</span>
+                  {(['post', 'story', 'short'] as PostFormat[]).map((format) => (
+                    <button
+                      key={format}
+                      onClick={() => setPostFormat(format)}
+                      className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-colors ${
+                        postFormat === format ? 'bg-white text-black' : 'bg-white/5 text-gray-400'
+                      }`}
+                    >
+                      {format === 'post' ? 'Post' : format === 'story' ? 'Story' : 'Short'}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 px-3 py-2 rounded-full">
+                  {previewMedia.mediaType === 'audio' ? (
+                    <Music2 size={12} className="text-blue-300" />
+                  ) : previewMedia.mediaType === 'video' ? (
+                    <Video size={12} className="text-blue-300" />
+                  ) : (
+                    <ImagePlus size={12} className="text-blue-300" />
+                  )}
+                  <span className="text-[9px] font-black uppercase tracking-widest text-blue-200">
+                    {previewMedia.mediaType === 'audio' ? 'Audio' : previewMedia.mediaType === 'video' ? 'Video' : 'Photo'}
+                  </span>
+                </div>
+             </div>
              <div className="relative rounded-[2.5rem] overflow-hidden aspect-[3/4] border border-white/10 shadow-2xl">
-                <img src={previewMedia.url} className="w-full h-full object-cover" alt="Preview" />
-                <button onClick={() => setShowCamera(true)} className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-6 py-2 rounded-full font-black text-xs flex items-center gap-2 text-white"><RefreshCcw size={14} /> Retake</button>
+                {previewMedia.mediaType === 'video' ? (
+                  <video src={previewMedia.url} className="w-full h-full object-cover" controls playsInline />
+                ) : previewMedia.mediaType === 'audio' ? (
+                  <div className="w-full h-full bg-gradient-to-br from-blue-900 via-black to-purple-900 flex flex-col items-center justify-center text-center px-6 gap-4">
+                    <div className="p-4 bg-white/10 rounded-2xl border border-white/10">
+                      <Music2 size={36} className="text-blue-200" />
+                    </div>
+                    <p className="text-[10px] uppercase tracking-[0.35em] text-blue-200/70 font-black">Audio Preview</p>
+                    <audio controls src={previewMedia.url} className="w-full max-w-sm">
+                      Your browser does not support audio playback.
+                    </audio>
+                  </div>
+                ) : (
+                  <img src={previewMedia.url} className="w-full h-full object-cover" alt="Preview" />
+                )}
+                <button
+                  onClick={() => openFilePicker(postFormat, previewMedia.mediaType === 'audio' ? 'audio' : postFormat === 'short' ? 'video' : undefined)}
+                  className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-6 py-2 rounded-full font-black text-xs flex items-center gap-2 text-white"
+                >
+                  <RefreshCcw size={14} /> Change Media
+                </button>
              </div>
              <textarea 
                value={caption}
                onChange={e => setCaption(e.target.value)}
-               placeholder="Write a caption... #GIGAVibe ✍️"
+               placeholder={`Write a ${postFormat === 'story' ? 'story' : postFormat === 'short' ? 'short' : 'caption'}... #GIGAVibe ✍️`}
                className="w-full bg-white/5 border border-white/10 rounded-[2rem] p-6 h-32 focus:outline-none focus:border-blue-500 outline-none text-sm resize-none text-white"
              />
           </div>

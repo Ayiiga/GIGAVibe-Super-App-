@@ -16,6 +16,8 @@ export interface Post {
   likes: number;
   comments: number;
   shares: number;
+  mediaType?: 'image' | 'video' | 'audio';
+  format?: 'post' | 'story' | 'short';
 }
 
 export interface ChatMessage {

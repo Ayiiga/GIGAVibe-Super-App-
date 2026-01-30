@@ -17,9 +17,22 @@ const MOCK_DATA = [
 const Wallet: React.FC = () => {
   const [isLocked, setIsLocked] = useState(true);
   const [pin, setPin] = useState('');
+  const [storedPin, setStoredPin] = useState<string | null>(() => {
+    return localStorage.getItem('gigavibe_wallet_pin');
+  });
+  const [pinSetupStep, setPinSetupStep] = useState<'create' | 'confirm'>('create');
+  const [setupPin, setSetupPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [setupError, setSetupError] = useState<string | null>(null);
   const [isShaking, setIsShaking] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'success'>('idle');
+
+  useEffect(() => {
+    if (storedPin) {
+      localStorage.setItem('gigavibe_wallet_pin', storedPin);
+    }
+  }, [storedPin]);
   
   // Withdrawal State
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -37,13 +50,14 @@ const Wallet: React.FC = () => {
   const [newPinEntry, setNewPinEntry] = useState('');
 
   const handlePinEnter = (num: string) => {
+    if (!storedPin) return;
     if (pin.length < 4 && !isShaking) {
       const newPin = pin + num;
       setPin(newPin);
       
       if (newPin.length === 4) {
         setTimeout(() => {
-          if (newPin === '1234') {
+          if (newPin === storedPin) {
             setIsLocked(false);
             setPin('');
           } else {
@@ -135,13 +149,100 @@ const Wallet: React.FC = () => {
         setPin('');
         setNewPinEntry('');
         setOtpCode('');
+        setStoredPin(newPinEntry);
         setIsLocked(false);
       } else {
         alert("Please enter a 4-digit PIN 🛡️");
       }
   };
 
+  const handlePinSetupNext = () => {
+    if (setupPin.length !== 4) {
+      setSetupError('Please enter a 4-digit PIN.');
+      return;
+    }
+    setSetupError(null);
+    setPinSetupStep('confirm');
+  };
+
+  const handlePinSetupConfirm = () => {
+    if (confirmPin.length !== 4) {
+      setSetupError('Confirm your 4-digit PIN.');
+      return;
+    }
+    if (confirmPin !== setupPin) {
+      setSetupError('PINs do not match. Try again.');
+      setConfirmPin('');
+      return;
+    }
+    setSetupError(null);
+    setStoredPin(confirmPin);
+    setIsLocked(false);
+    setSetupPin('');
+    setConfirmPin('');
+    setPinSetupStep('create');
+  };
+
   if (isLocked) {
+    if (!storedPin) {
+      return (
+        <div className="h-full bg-black flex flex-col items-center justify-center p-8 relative z-50 animate-in fade-in slide-in-from-bottom-4">
+          <div className="mb-8 p-6 bg-blue-600/20 rounded-full border-2 border-blue-500/50 shadow-[0_0_40px_rgba(37,99,235,0.3)]">
+            <Lock size={48} className="text-blue-500" />
+          </div>
+          <h2 className="text-2xl font-black mb-2 tracking-tight">Create Your GIGAPIN 🔐</h2>
+          <p className="text-gray-400 mb-8 text-center text-sm max-w-xs">
+            New wallet users must set a personal PIN before accessing funds.
+          </p>
+
+          <div className="w-full max-w-xs space-y-4">
+            {pinSetupStep === 'create' ? (
+              <>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={4}
+                  value={setupPin}
+                  onChange={(e) => {
+                    setSetupPin(e.target.value);
+                    setSetupError(null);
+                  }}
+                  placeholder="Create 4-digit PIN"
+                  className="bg-white/5 border border-white/10 text-center text-3xl tracking-[0.5em] font-black rounded-2xl p-4 w-full focus:border-blue-500 outline-none transition-colors"
+                  autoFocus
+                />
+                <button onClick={handlePinSetupNext} className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-500 transition-colors">
+                  Continue ➡️
+                </button>
+              </>
+            ) : (
+              <>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={4}
+                  value={confirmPin}
+                  onChange={(e) => {
+                    setConfirmPin(e.target.value);
+                    setSetupError(null);
+                  }}
+                  placeholder="Confirm PIN"
+                  className="bg-white/5 border border-white/10 text-center text-3xl tracking-[0.5em] font-black rounded-2xl p-4 w-full focus:border-blue-500 outline-none transition-colors"
+                  autoFocus
+                />
+                <button onClick={handlePinSetupConfirm} className="w-full bg-white text-black font-bold py-4 rounded-xl shadow-lg hover:bg-gray-200 transition-colors">
+                  Set PIN ✅
+                </button>
+              </>
+            )}
+            {setupError && <p className="text-xs text-red-400 text-center">{setupError}</p>}
+          </div>
+        </div>
+      );
+    }
+
     if (forgotPinStep !== 'idle') {
       return (
         <div className="h-full bg-black flex flex-col items-center justify-center p-8 relative z-50 animate-in fade-in slide-in-from-bottom-4">
