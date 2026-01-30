@@ -83,10 +83,23 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case TabType.SOCIAL: return <SocialFeed onRemix={handleRemix} onShop={() => setActiveTab(TabType.MARKETPLACE)} />;
+      case TabType.SOCIAL: return (
+        <SocialFeed
+          onRemix={handleRemix}
+          onShop={() => setActiveTab(TabType.MARKETPLACE)}
+          onOpenAiLab={() => setActiveTab(TabType.AI_LAB)}
+          onOpenWallet={() => setActiveTab(TabType.WALLET)}
+        />
+      );
       case TabType.CHATS: return <ChatInterface />;
       case TabType.MARKETPLACE: return <Marketplace />;
-      case TabType.AI_LAB: return <AILab remixSource={remixContext} onClearRemix={() => setRemixContext(null)} />;
+      case TabType.AI_LAB: return (
+        <AILab
+          remixSource={remixContext}
+          onClearRemix={() => setRemixContext(null)}
+          onOpenSocial={() => setActiveTab(TabType.SOCIAL)}
+        />
+      );
       case TabType.WALLET: return <Wallet />;
       default: return <SocialFeed />;
     }

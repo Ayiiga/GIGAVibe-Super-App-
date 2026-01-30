@@ -4,15 +4,20 @@ import { gemini } from '../services/geminiService';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { 
   Sparkles, Loader2, Wand2, X, Zap, 
-  RefreshCcw, BrainCircuit, RefreshCw, AudioLines, Square, Mic, Copy, Clapperboard
+  RefreshCcw, BrainCircuit, RefreshCw, AudioLines, Square, Mic, Copy, Clapperboard,
+  CheckCircle2, Download, Share2
 } from 'lucide-react';
+
+const AI_SHARE_KEY = 'gigavibe_ai_share';
+const CAPTION_DRAFT_KEY = 'gigavibe_caption_draft';
 
 interface AILabProps {
   remixSource?: { url: string; type: 'image' | 'video'; username: string } | null;
   onClearRemix?: () => void;
+  onOpenSocial?: () => void;
 }
 
-const AILab: React.FC<AILabProps> = ({ remixSource, onClearRemix }) => {
+const AILab: React.FC<AILabProps> = ({ remixSource, onClearRemix, onOpenSocial }) => {
   const [activeTool, setActiveTool] = useState<'caption' | 'visual' | 'coach' | 'image_gen' | 'video_gen' | 'remix' | 'transcribe'>('caption');
   const [input, setInput] = useState('');
   const [result, setResult] = useState<string | null>(null);
@@ -25,11 +30,17 @@ const AILab: React.FC<AILabProps> = ({ remixSource, onClearRemix }) => {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionHistory, setTranscriptionHistory] = useState<string[]>([]);
   const [liveTranscript, setLiveTranscript] = useState('');
+  const [toast, setToast] = useState<string | null>(null);
   
   const currentTranscriptRef = useRef('');
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const showFeedback = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   // Auto-scroll transcription
   useEffect(() => {
@@ -197,8 +208,54 @@ const AILab: React.FC<AILabProps> = ({ remixSource, onClearRemix }) => {
     if (onClearRemix) onClearRemix();
   };
 
+  const handleCopyResult = async () => {
+    if (!result) return;
+    try {
+      await navigator.clipboard.writeText(result);
+      showFeedback('Copied to clipboard ✅');
+    } catch {
+      showFeedback('Copy failed. Try again.');
+    }
+  };
+
+  const handleShareToSocial = () => {
+    if (!result) return;
+    if (activeTool === 'caption') {
+      localStorage.setItem(CAPTION_DRAFT_KEY, result);
+      showFeedback('Caption saved for Social Feed ✍️');
+      onOpenSocial?.();
+      return;
+    }
+
+    const payload = {
+      url: result,
+      type: activeTool === 'video_gen' ? 'video' : 'image',
+      caption: input || undefined
+    };
+    localStorage.setItem(AI_SHARE_KEY, JSON.stringify(payload));
+    showFeedback('AI creation queued for Social Feed 🚀');
+    onOpenSocial?.();
+  };
+
+  const handleDownloadResult = () => {
+    if (!result) return;
+    const link = document.createElement('a');
+    link.href = result;
+    link.download = activeTool === 'video_gen' ? 'gigavibe_ai_video.mp4' : 'gigavibe_ai_image.png';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showFeedback('Saved to device ✅');
+  };
+
   return (
     <div className="h-full bg-black p-6 pt-24 overflow-y-auto pb-32 no-scrollbar">
+      {toast && (
+        <div className="fixed top-28 left-1/2 -translate-x-1/2 z-[3000] bg-white text-black px-6 py-3 rounded-full flex items-center gap-2 shadow-2xl animate-in fade-in slide-in-from-top-4 duration-300">
+          <CheckCircle2 size={18} className="text-green-600" />
+          <span className="text-xs font-black uppercase tracking-widest">{toast}</span>
+        </div>
+      )}
       <div className="mb-6 flex justify-between items-start">
         <div>
           <h2 className="text-3xl font-black flex items-center gap-2 italic">
@@ -285,7 +342,7 @@ const AILab: React.FC<AILabProps> = ({ remixSource, onClearRemix }) => {
                         onClick={() => {
                            const fullText = [...transcriptionHistory, liveTranscript].filter(Boolean).join('\n');
                            navigator.clipboard.writeText(fullText);
-                           alert("Copied to clipboard!");
+                           showFeedback("Copied to clipboard ✅");
                         }}
                         className="flex-1 bg-white/5 border border-white/10 py-3 rounded-2xl flex items-center justify-center gap-2 font-bold text-xs hover:bg-white/10 transition-colors"
                       >
@@ -341,15 +398,47 @@ const AILab: React.FC<AILabProps> = ({ remixSource, onClearRemix }) => {
               <div className="mt-8 animate-in slide-in-from-bottom-8">
                 <div className="bg-white/5 rounded-[2.5rem] p-8 border border-white/10">
                   {activeTool === 'caption' ? (
-                    <p className="whitespace-pre-wrap text-lg font-semibold italic">{result}</p>
+                    <>
+                      <p className="whitespace-pre-wrap text-lg font-semibold italic">{result}</p>
+                      <div className="flex gap-3 mt-6">
+                        <button
+                          onClick={handleCopyResult}
+                          className="flex-1 bg-white/10 border border-white/10 py-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest"
+                        >
+                          <Copy size={16} /> Copy
+                        </button>
+                        <button
+                          onClick={handleShareToSocial}
+                          className="flex-1 bg-blue-600 py-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest"
+                        >
+                          <Share2 size={16} /> Use in Social
+                        </button>
+                      </div>
+                    </>
                   ) : (
-                    <div className="rounded-[1.5rem] overflow-hidden shadow-2xl">
-                       {activeTool === 'video_gen' ? (
-                         <video src={result} className="w-full h-auto" controls autoPlay loop playsInline />
-                       ) : (
-                         <img src={result} className="w-full h-auto" alt="AI Result" />
-                       )}
-                    </div>
+                    <>
+                      <div className="rounded-[1.5rem] overflow-hidden shadow-2xl">
+                         {activeTool === 'video_gen' ? (
+                           <video src={result} className="w-full h-auto" controls autoPlay loop playsInline />
+                         ) : (
+                           <img src={result} className="w-full h-auto" alt="AI Result" />
+                         )}
+                      </div>
+                      <div className="flex gap-3 mt-6">
+                        <button
+                          onClick={handleDownloadResult}
+                          className="flex-1 bg-white/10 border border-white/10 py-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest"
+                        >
+                          <Download size={16} /> Download
+                        </button>
+                        <button
+                          onClick={handleShareToSocial}
+                          className="flex-1 bg-blue-600 py-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest"
+                        >
+                          <Share2 size={16} /> Post to Social
+                        </button>
+                      </div>
+                    </>
                   )}
                 </div>
               </div>

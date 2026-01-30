@@ -24,7 +24,7 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   isMe: boolean;
-  type?: 'text' | 'system' | 'image';
+  type?: 'text' | 'system' | 'image' | 'video';
 }
 
 export interface Product {

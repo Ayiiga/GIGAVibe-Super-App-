@@ -12,11 +12,14 @@ import {
   UserRoundPlus, UserRoundCheck, Check, Smile, RefreshCcw, Tag, Rocket, TrendingUp
 } from 'lucide-react';
 import { gemini } from '../services/geminiService';
+import { getCreatorCode, getCreatorStats, updateCreatorStats } from '../services/creatorStats';
 import LiveHost from './LiveHost';
 
 interface SocialFeedProps {
   onRemix?: (context: { url: string; type: 'image' | 'video'; username: string }) => void;
   onShop?: () => void;
+  onOpenAiLab?: () => void;
+  onOpenWallet?: () => void;
 }
 
 interface Comment {
@@ -34,10 +37,22 @@ interface SocialPost extends Post {
   isLiked: boolean;
   isFollowing: boolean;
   isBoostedPost?: boolean;
+  isRecommended?: boolean;
+  isMonetized?: boolean;
+  earnings?: number;
   commentList: Comment[];
 }
 
 const QUICK_EMOJIS = ['❤️', '🔥', '👏', '😂', '💯', '✨', '🙌', '😮', '🚀', '😍', '✅'];
+const CREATOR_DEFAULTS_KEY = 'gigavibe_creator_defaults';
+const AI_SHARE_KEY = 'gigavibe_ai_share';
+const CAPTION_DRAFT_KEY = 'gigavibe_caption_draft';
+
+type CreatorDefaults = {
+  freeCreate: boolean;
+  autoRecommend: boolean;
+  earnWithPosts: boolean;
+};
 
 const INITIAL_POSTS: SocialPost[] = [
   {
@@ -54,6 +69,9 @@ const INITIAL_POSTS: SocialPost[] = [
     isLiked: false,
     isFollowing: false,
     isBoostedPost: true,
+    isRecommended: true,
+    isMonetized: true,
+    earnings: 24,
     commentList: [
       { id: 'c1', username: '@benard_a', avatar: 'https://picsum.photos/seed/user3/100', text: 'This looks incredible! Can\'t wait for the update. 🔥', timestamp: '2h ago', likes: 12 },
       { id: 'c2', username: '@future_dev', avatar: 'https://picsum.photos/seed/user4/100', text: 'GIGA taking over 🌍🚀', timestamp: '1h ago', likes: 5 }
@@ -72,14 +90,38 @@ const INITIAL_POSTS: SocialPost[] = [
     isVideo: false,
     isLiked: true,
     isFollowing: true,
+    isRecommended: false,
+    isMonetized: true,
+    earnings: 12,
     commentList: [
       { id: 'c3', username: '@style_queen', avatar: 'https://picsum.photos/seed/user5/100', text: 'The quality of these fabrics is top tier! 😍', timestamp: '30m ago', likes: 24 }
     ]
   }
 ];
 
-const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
+const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop, onOpenAiLab, onOpenWallet }) => {
   const [posts, setPosts] = useState<SocialPost[]>(INITIAL_POSTS);
+  const [creatorStats, setCreatorStats] = useState(() => getCreatorStats());
+  const [showCreatorHub, setShowCreatorHub] = useState(false);
+  const [creatorDefaults, setCreatorDefaults] = useState<CreatorDefaults>(() => {
+    const defaults = { freeCreate: true, autoRecommend: true, earnWithPosts: true };
+    if (typeof localStorage === 'undefined') return defaults;
+    try {
+      const raw = localStorage.getItem(CREATOR_DEFAULTS_KEY);
+      if (!raw) return defaults;
+      const parsed = JSON.parse(raw);
+      return {
+        freeCreate: Boolean(parsed.freeCreate),
+        autoRecommend: Boolean(parsed.autoRecommend),
+        earnWithPosts: Boolean(parsed.earnWithPosts)
+      };
+    } catch {
+      return defaults;
+    }
+  });
+  const [postSettings, setPostSettings] = useState({ recommend: true, monetize: true });
+  const [estimatedEarnings, setEstimatedEarnings] = useState(0);
+  const [creatorCode] = useState(() => getCreatorCode());
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [previewMedia, setPreviewMedia] = useState<{ url: string, type: 'image' | 'video' } | null>(null);
@@ -136,6 +178,63 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
     setTimeout(() => setToast(null), 3000);
   };
 
+  const syncCreatorStats = (updater: (stats: ReturnType<typeof getCreatorStats>) => ReturnType<typeof getCreatorStats>) => {
+    const next = updateCreatorStats(updater);
+    setCreatorStats(next);
+    window.dispatchEvent(new Event('gigavibe-stats-updated'));
+  };
+
+  const updateEstimatedEarnings = (monetize: boolean) => {
+    if (!monetize) {
+      setEstimatedEarnings(0);
+      return;
+    }
+    const base = Math.floor(6 + Math.random() * 16);
+    setEstimatedEarnings(base);
+  };
+
+  const openUpload = (captionOverride?: string) => {
+    setPostSettings({
+      recommend: creatorDefaults.autoRecommend,
+      monetize: creatorDefaults.earnWithPosts
+    });
+    updateEstimatedEarnings(creatorDefaults.earnWithPosts);
+
+    if (captionOverride) {
+      setCaption(captionOverride);
+    } else if (!caption && typeof localStorage !== 'undefined') {
+      const storedCaption = localStorage.getItem(CAPTION_DRAFT_KEY);
+      if (storedCaption) {
+        setCaption(storedCaption);
+        localStorage.removeItem(CAPTION_DRAFT_KEY);
+      }
+    }
+    setShowUpload(true);
+  };
+
+  useEffect(() => {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(CREATOR_DEFAULTS_KEY, JSON.stringify(creatorDefaults));
+  }, [creatorDefaults]);
+
+  useEffect(() => {
+    if (typeof localStorage === 'undefined') return;
+    const raw = localStorage.getItem(AI_SHARE_KEY);
+    if (!raw) return;
+    try {
+      const payload = JSON.parse(raw) as { url: string; type: 'image' | 'video'; caption?: string };
+      if (payload?.url) {
+        setPreviewMedia({ url: payload.url, type: payload.type || 'image' });
+        openUpload(payload.caption);
+        showFeedback('AI creation ready to post ✨');
+      }
+    } catch {
+      showFeedback('Could not load AI share draft.');
+    } finally {
+      localStorage.removeItem(AI_SHARE_KEY);
+    }
+  }, []);
+
   const capturePhoto = () => {
     if (videoRef.current && canvasRef.current) {
       const ctx = canvasRef.current.getContext('2d');
@@ -146,13 +245,14 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
         const dataUrl = canvasRef.current.toDataURL('image/jpeg');
         setPreviewMedia({ url: dataUrl, type: 'image' });
         setShowCamera(false);
-        setShowUpload(true);
+        openUpload();
       }
     }
   };
 
   const handlePostSubmit = () => {
     if (!previewMedia) return;
+    const earned = postSettings.monetize ? (estimatedEarnings || Math.floor(6 + Math.random() * 16)) : 0;
     const newPost: SocialPost = {
       id: Date.now().toString(),
       username: '@ayiiga_benard',
@@ -165,13 +265,28 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
       isVideo: previewMedia.type === 'video',
       isLiked: false,
       isFollowing: false,
+      isRecommended: postSettings.recommend,
+      isMonetized: postSettings.monetize,
+      earnings: earned,
       commentList: []
     };
-    setPosts([newPost, ...posts]);
+    setPosts(prev => [newPost, ...prev]);
+
+    syncCreatorStats((stats) => ({
+      ...stats,
+      posts: stats.posts + 1,
+      earnings: stats.earnings + earned,
+      recommendations: stats.recommendations + (postSettings.recommend ? 1 : 0)
+    }));
+
     setShowUpload(false);
     setPreviewMedia(null);
     setCaption('');
-    showFeedback("Vibe Posted Successfully! 🚀");
+    showFeedback(
+      postSettings.monetize
+        ? `Post live! +GH₵ ${earned} projected earnings ✅`
+        : 'Vibe Posted Successfully! 🚀'
+    );
   };
 
   const toggleLike = (postId: string) => {
@@ -228,6 +343,14 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
         navigator.clipboard.writeText(shareUrl);
         showFeedback("Link copied to clipboard! 📋");
         break;
+      case 'Recommend':
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, isRecommended: true } : p));
+        syncCreatorStats((stats) => ({
+          ...stats,
+          recommendations: stats.recommendations + 1
+        }));
+        showFeedback("Recommended to others! 🚀");
+        break;
       case 'Download':
         const link = document.createElement('a');
         link.href = post.contentUrl;
@@ -242,6 +365,38 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
     }
     setShowShareSheet(null);
   };
+
+  const handleCopyCreatorLink = async () => {
+    const link = `${window.location.origin}?ref=${creatorCode}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'Join GIGAVibe',
+          text: 'Create, earn, and share on GIGAVibe.',
+          url: link
+        });
+      } else {
+        await navigator.clipboard.writeText(link);
+      }
+      syncCreatorStats((stats) => ({
+        ...stats,
+        referrals: stats.referrals + 1
+      }));
+      showFeedback('Creator link shared ✅');
+    } catch {
+      await navigator.clipboard.writeText(link);
+      showFeedback('Creator link copied 📋');
+    }
+  };
+
+  const Toggle = ({ active, onToggle }: { active: boolean; onToggle: () => void }) => (
+    <button
+      onClick={onToggle}
+      className={`w-12 h-6 rounded-full transition-all relative shadow-inner ${active ? 'bg-blue-600' : 'bg-white/10'}`}
+    >
+      <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${active ? 'translate-x-6' : 'translate-x-0'}`} />
+    </button>
+  );
 
   if (isLive) {
     return <LiveHost onClose={() => setIsLive(false)} />;
@@ -315,12 +470,26 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
                         {post.username}
                         <BadgeCheck size={14} className="text-blue-400 fill-blue-400/20" />
                       </h3>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[10px] text-white/70 font-black uppercase tracking-tighter drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">GIGA Creator</span>
                         {post.isBoostedPost && (
                           <div className="flex items-center gap-1 bg-yellow-500/20 border border-yellow-500/50 px-2 py-0.5 rounded-full">
                             <Zap size={8} className="text-yellow-400 fill-yellow-400" />
                             <span className="text-[8px] font-black uppercase text-yellow-400">Promoted</span>
+                          </div>
+                        )}
+                        {post.isRecommended && (
+                          <div className="flex items-center gap-1 bg-blue-500/20 border border-blue-500/40 px-2 py-0.5 rounded-full">
+                            <TrendingUp size={8} className="text-blue-300" />
+                            <span className="text-[8px] font-black uppercase text-blue-200">Recommended</span>
+                          </div>
+                        )}
+                        {post.isMonetized && (
+                          <div className="flex items-center gap-1 bg-green-500/20 border border-green-500/40 px-2 py-0.5 rounded-full">
+                            <DollarSign size={8} className="text-green-300" />
+                            <span className="text-[8px] font-black uppercase text-green-200">
+                              Earns GH₵ {post.earnings ?? 0}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -331,7 +500,7 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
                   {/* Shop Product Tag */}
                   {post.hasProduct && (
                     <button 
-                      onClick={onShop}
+                      onClick={() => onShop?.()}
                       className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 px-3 py-1.5 rounded-full transition-all group"
                     >
                       <Tag size={12} className="text-blue-400" />
@@ -423,6 +592,11 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
               <span className="text-[11px] font-black uppercase tracking-widest mr-1">Start Live 🎥</span>
               <Radio size={24} className="animate-pulse" />
            </button>
+
+           <button onClick={() => { setShowCreatorHub(true); setIsMenuOpen(false); }} className="bg-blue-600/90 text-white p-5 rounded-full shadow-2xl flex items-center gap-3 active:scale-90 transition-transform border border-blue-400/30">
+              <span className="text-[11px] font-black uppercase tracking-widest mr-1">Creator Hub ✨</span>
+              <Sparkles size={22} />
+           </button>
            
            <button onClick={() => { setShowCamera(true); setIsMenuOpen(false); }} className="bg-white/10 backdrop-blur-2xl text-white p-5 rounded-full shadow-2xl flex items-center gap-3 active:scale-90 transition-transform border border-white/20">
               <span className="text-[11px] font-black uppercase tracking-widest mr-1">Camera 📸</span>
@@ -465,7 +639,7 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
           const r = new FileReader();
           r.onloadend = () => {
             setPreviewMedia({ url: r.result as string, type: f.type.startsWith('video') ? 'video' : 'image' });
-            setShowUpload(true);
+            openUpload();
           };
           r.readAsDataURL(f);
         }
@@ -481,8 +655,23 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
           </div>
           <div className="flex-1 p-6 space-y-6 overflow-y-auto no-scrollbar pb-32">
              <div className="relative rounded-[2.5rem] overflow-hidden aspect-[3/4] border border-white/10 shadow-2xl">
-                <img src={previewMedia.url} className="w-full h-full object-cover" alt="Preview" />
-                <button onClick={() => setShowCamera(true)} className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-6 py-2 rounded-full font-black text-xs flex items-center gap-2 text-white"><RefreshCcw size={14} /> Retake</button>
+               {previewMedia.type === 'video' ? (
+                 <video src={previewMedia.url} className="w-full h-full object-cover" autoPlay loop muted playsInline />
+               ) : (
+                 <img src={previewMedia.url} className="w-full h-full object-cover" alt="Preview" />
+               )}
+               <button
+                 onClick={() => {
+                   if (previewMedia.type === 'video') {
+                     fileInputRef.current?.click();
+                   } else {
+                     setShowCamera(true);
+                   }
+                 }}
+                 className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-6 py-2 rounded-full font-black text-xs flex items-center gap-2 text-white"
+               >
+                 <RefreshCcw size={14} /> Retake
+               </button>
              </div>
              <textarea 
                value={caption}
@@ -490,6 +679,40 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
                placeholder="Write a caption... #GIGAVibe ✍️"
                className="w-full bg-white/5 border border-white/10 rounded-[2rem] p-6 h-32 focus:outline-none focus:border-blue-500 outline-none text-sm resize-none text-white"
              />
+            <div className="bg-white/5 border border-white/10 rounded-[2rem] p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold">Earn with Creator Program</p>
+                  <p className="text-[10px] text-gray-500">Unlock payouts on engagement 💸</p>
+                </div>
+                <Toggle
+                  active={postSettings.monetize}
+                  onToggle={() => {
+                    setPostSettings((prev) => {
+                      const next = { ...prev, monetize: !prev.monetize };
+                      updateEstimatedEarnings(next.monetize);
+                      return next;
+                    });
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold">Recommend to Others</p>
+                  <p className="text-[10px] text-gray-500">Boost reach automatically 🚀</p>
+                </div>
+                <Toggle
+                  active={postSettings.recommend}
+                  onToggle={() => setPostSettings((prev) => ({ ...prev, recommend: !prev.recommend }))}
+                />
+              </div>
+              {postSettings.monetize && (
+                <div className="flex items-center justify-between bg-green-500/10 border border-green-500/20 rounded-2xl p-3">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-green-400">Estimated Earnings</span>
+                  <span className="text-sm font-black text-green-300">GH₵ {estimatedEarnings}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -502,6 +725,7 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
             <div className="grid grid-cols-4 gap-8 mb-10">
               {[{ icon: MessageSquare, label: 'WhatsApp', key: 'WhatsApp', color: 'bg-green-600' },
                 { icon: Instagram, label: 'Stories', key: 'Instagram', color: 'bg-gradient-to-tr from-yellow-500 via-red-500 to-purple-600' },
+                { icon: TrendingUp, label: 'Recommend', key: 'Recommend', color: 'bg-blue-600' },
                 { icon: LinkIcon, label: 'Link', key: 'Link', color: 'bg-white/10' },
                 { icon: Download, label: 'Download', key: 'Download', color: 'bg-white/10' }].map((item, idx) => (
                 <button key={idx} onClick={() => handleShareAction(item.key, showShareSheet)} className="flex flex-col items-center gap-3">
@@ -511,6 +735,117 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
               ))}
             </div>
             <button onClick={() => setShowShareSheet(null)} className="w-full bg-white/5 border border-white/10 py-5 rounded-[1.5rem] font-black text-sm uppercase tracking-[0.2em] text-white">Cancel ✖️</button>
+          </div>
+        </div>
+      )}
+
+      {/* Creator Hub Modal */}
+      {showCreatorHub && (
+        <div className="fixed inset-0 z-[2600] bg-black/90 backdrop-blur-2xl flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="w-full max-w-sm bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] p-6 shadow-2xl relative">
+            <button onClick={() => setShowCreatorHub(false)} className="absolute top-5 right-5 p-2 bg-white/10 rounded-full hover:bg-white/20 transition-colors">
+              <X size={18} />
+            </button>
+            <div className="mb-6">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 flex items-center justify-center">
+                  <Sparkles size={20} className="text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black italic">Creator Freedom ✨</h3>
+                  <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Create, Earn, Recommend</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400">Post freely, unlock earnings, and recommend your work to new audiences.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                <p className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Earnings</p>
+                <p className="text-lg font-black text-green-400">GH₵ {creatorStats.earnings.toLocaleString()}</p>
+              </div>
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                <p className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Posts</p>
+                <p className="text-lg font-black text-white">{creatorStats.posts.toLocaleString()}</p>
+              </div>
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                <p className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Recommendations</p>
+                <p className="text-lg font-black text-blue-400">{creatorStats.recommendations.toLocaleString()}</p>
+              </div>
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                <p className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Referrals</p>
+                <p className="text-lg font-black text-purple-400">{creatorStats.referrals.toLocaleString()}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-2xl p-4">
+                <div>
+                  <p className="text-xs font-bold">Free Create Mode</p>
+                  <p className="text-[10px] text-gray-500">Upload without limits 🎨</p>
+                </div>
+                <Toggle
+                  active={creatorDefaults.freeCreate}
+                  onToggle={() => setCreatorDefaults((prev) => ({ ...prev, freeCreate: !prev.freeCreate }))}
+                />
+              </div>
+              <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-2xl p-4">
+                <div>
+                  <p className="text-xs font-bold">Auto Recommend</p>
+                  <p className="text-[10px] text-gray-500">Boost reach to new fans 🚀</p>
+                </div>
+                <Toggle
+                  active={creatorDefaults.autoRecommend}
+                  onToggle={() => setCreatorDefaults((prev) => ({ ...prev, autoRecommend: !prev.autoRecommend }))}
+                />
+              </div>
+              <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-2xl p-4">
+                <div>
+                  <p className="text-xs font-bold">Earn With Posts</p>
+                  <p className="text-[10px] text-gray-500">Enable creator payouts 💸</p>
+                </div>
+                <Toggle
+                  active={creatorDefaults.earnWithPosts}
+                  onToggle={() => setCreatorDefaults((prev) => ({ ...prev, earnWithPosts: !prev.earnWithPosts }))}
+                />
+              </div>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6">
+              <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-2">Creator Code</p>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-black text-white">{creatorCode}</span>
+                <button
+                  onClick={handleCopyCreatorLink}
+                  className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest"
+                >
+                  <Copy size={14} /> Share Link
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => {
+                  if (onOpenAiLab) onOpenAiLab();
+                  else showFeedback('AI Lab opening soon ✨');
+                  setShowCreatorHub(false);
+                }}
+                className="w-full bg-white/10 border border-white/10 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-white/20 transition-colors"
+              >
+                Open AI Lab
+              </button>
+              <button
+                onClick={() => {
+                  if (onOpenWallet) onOpenWallet();
+                  else showFeedback('Wallet opening soon 💳');
+                  setShowCreatorHub(false);
+                }}
+                className="w-full bg-blue-600 py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-white hover:bg-blue-500 transition-colors"
+              >
+                View Wallet
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -535,8 +870,8 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
                     </div>
                     <p className="text-sm text-gray-200 leading-snug">{comment.text}</p>
                     <div className="flex items-center gap-4 mt-2">
-                       <button className="flex items-center gap-1 text-[10px] text-gray-500 font-bold hover:text-red-500 transition-colors"><Heart size={12} /> {comment.likes}</button>
-                       <button className="text-[10px] text-gray-500 font-bold hover:text-white transition-colors">Reply</button>
+                      <button onClick={() => showFeedback('Comment liked ❤️')} className="flex items-center gap-1 text-[10px] text-gray-500 font-bold hover:text-red-500 transition-colors"><Heart size={12} /> {comment.likes}</button>
+                      <button onClick={() => showFeedback('Reply opened 💬')} className="text-[10px] text-gray-500 font-bold hover:text-white transition-colors">Reply</button>
                     </div>
                   </div>
                 </div>
@@ -558,7 +893,7 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
                </div>
                
                <div className="flex gap-3 items-center bg-white/5 border border-white/10 rounded-full px-4 py-1">
-                  <button className="p-2 text-gray-500"><Smile size={20} /></button>
+                  <button onClick={() => showFeedback('Emoji picker coming soon 😊')} className="p-2 text-gray-500"><Smile size={20} /></button>
                   <input value={newCommentText} onChange={e => setNewCommentText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddComment()} placeholder="Add a vibe... ✨" className="flex-1 bg-transparent py-3 text-sm focus:outline-none text-white" />
                   <button onClick={handleAddComment} disabled={!newCommentText.trim()} className={`p-2 transition-all ${newCommentText.trim() ? 'text-blue-500' : 'text-gray-700'}`}><Send size={20} /></button>
                </div>
