@@ -1,8 +1,13 @@
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Product } from '../types';
-import { ShoppingCart, Heart, TrendingUp, Play, Zap, Star, BadgeCheck, Shield, CheckCircle, Plus, Image as ImageIcon, Sparkles, X, Wand2, Loader2, Flame } from 'lucide-react';
+import { ShoppingCart, Play, Zap, Star, BadgeCheck, Shield, CheckCircle, Plus, Image as ImageIcon, X, Wand2, Loader2, Flame, ClipboardList, Truck, Package, MapPin } from 'lucide-react';
 import { gemini } from '../services/geminiService';
+import { appState, Order, TrackingEvent } from '../services/appState';
+
+interface MarketplaceProps {
+  onOpenBusinessVerification?: () => void;
+}
 
 const MOCK_PRODUCTS: (Product & { isVideo?: boolean })[] = [
   { 
@@ -54,11 +59,15 @@ const MOCK_PRODUCTS: (Product & { isVideo?: boolean })[] = [
   },
 ];
 
-const Marketplace: React.FC = () => {
+const Marketplace: React.FC<MarketplaceProps> = ({ onOpenBusinessVerification }) => {
   const [activeCategory, setActiveCategory] = useState('All');
   const [buyingProduct, setBuyingProduct] = useState<Product | null>(null);
   const [isSelling, setIsSelling] = useState(false);
   const [viralBoost, setViralBoost] = useState(false);
+  const [showVerifyGate, setShowVerifyGate] = useState(false);
+  const [orders, setOrders] = useState<Order[]>(() => appState.getOrders());
+  const [showOrders, setShowOrders] = useState(false);
+  const [activeTrackingOrderId, setActiveTrackingOrderId] = useState<string | null>(null);
   
   // Selling State
   const [productName, setProductName] = useState('');
@@ -84,6 +93,90 @@ const Marketplace: React.FC = () => {
     setIsGeneratingDesc(false);
   };
 
+  const businessStatus = appState.getBusinessStatus();
+
+  const activeOrder = useMemo(() => {
+    if (!activeTrackingOrderId) return null;
+    return orders.find((o) => o.id === activeTrackingOrderId) || null;
+  }, [activeTrackingOrderId, orders]);
+
+  const persistOrders = (next: Order[]) => {
+    setOrders(next);
+    appState.setOrders(next);
+  };
+
+  const createOrderForProduct = (product: Product) => {
+    const trackingNumber = `GIGA-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    const createdAt = new Date().toISOString();
+    const events: TrackingEvent[] = [
+      {
+        id: `${Date.now()}-e1`,
+        status: 'processing',
+        label: 'Order confirmed',
+        timestamp: createdAt,
+        location: 'GIGA Secure Escrow Vault'
+      }
+    ];
+    const order: Order = {
+      id: `${Date.now()}`,
+      productId: product.id,
+      productName: product.name,
+      productImage: product.image,
+      price: product.price,
+      trackingNumber,
+      createdAt,
+      events
+    };
+    const next = [order, ...orders];
+    persistOrders(next);
+    return order;
+  };
+
+  const advanceTracking = (orderId: string) => {
+    const next = orders.map((o) => {
+      if (o.id !== orderId) return o;
+      const last = o.events[o.events.length - 1];
+      const nextStatus = last.status === 'processing'
+        ? 'packed'
+        : last.status === 'packed'
+          ? 'shipped'
+          : last.status === 'shipped'
+            ? 'out_for_delivery'
+            : last.status === 'out_for_delivery'
+              ? 'delivered'
+              : 'delivered';
+
+      if (nextStatus === last.status) return o;
+
+      const label =
+        nextStatus === 'packed'
+          ? 'Packed at warehouse'
+          : nextStatus === 'shipped'
+            ? 'Shipped'
+            : nextStatus === 'out_for_delivery'
+              ? 'Out for delivery'
+              : 'Delivered';
+
+      const location =
+        nextStatus === 'packed'
+          ? 'Vendor fulfillment center'
+          : nextStatus === 'shipped'
+            ? 'In transit'
+            : nextStatus === 'out_for_delivery'
+              ? 'Local dispatch hub'
+              : 'Delivered to destination';
+
+      return {
+        ...o,
+        events: [
+          ...o.events,
+          { id: `${Date.now()}-${nextStatus}`, status: nextStatus, label, timestamp: new Date().toISOString(), location }
+        ]
+      };
+    });
+    persistOrders(next);
+  };
+
   return (
     <div className="h-full bg-black flex flex-col pt-24 relative">
       <div className="p-4 flex-1 overflow-y-auto no-scrollbar pb-24">
@@ -98,12 +191,28 @@ const Marketplace: React.FC = () => {
               </div>
             </div>
           </div>
-          <button 
-            onClick={() => setIsSelling(true)}
-            className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded-full font-black text-sm hover:bg-gray-200 transition-colors shadow-lg active:scale-95"
-          >
-            <span className="shrink-0"><Plus size={16} /></span> Sell
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowOrders(true)}
+              className="flex items-center gap-2 bg-white/10 border border-white/10 text-white px-4 py-2 rounded-full font-black text-sm hover:bg-white/15 transition-colors shadow-lg active:scale-95"
+              title="My Orders"
+            >
+              <ClipboardList size={16} />
+              Orders
+            </button>
+            <button 
+              onClick={() => {
+                if (businessStatus !== 'verified') {
+                  setShowVerifyGate(true);
+                  return;
+                }
+                setIsSelling(true);
+              }}
+              className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded-full font-black text-sm hover:bg-gray-200 transition-colors shadow-lg active:scale-95"
+            >
+              <span className="shrink-0"><Plus size={16} /></span> Sell
+            </button>
+          </div>
         </div>
 
         <div className="flex gap-3 overflow-x-auto no-scrollbar mb-8">
@@ -304,6 +413,44 @@ const Marketplace: React.FC = () => {
         </div>
       )}
 
+      {/* Verification Gate Modal */}
+      {showVerifyGate && (
+        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-3xl p-6 shadow-2xl">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-black">Verify Business First 🛡️</h3>
+              <button onClick={() => setShowVerifyGate(false)} className="p-2 bg-white/5 rounded-full"><X size={18} /></button>
+            </div>
+            <p className="text-sm text-gray-400 mb-6">
+              To reduce fraud, businesses must complete verification (location + documents) before listing items for sale.
+            </p>
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6">
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2">Current status</p>
+              <p className="text-sm font-bold text-white">
+                {businessStatus === 'pending' ? 'Review pending' : 'Not verified'}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowVerifyGate(false);
+                  onOpenBusinessVerification?.();
+                }}
+                className="flex-1 bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-transform"
+              >
+                Start Verification
+              </button>
+              <button
+                onClick={() => setShowVerifyGate(false)}
+                className="flex-1 bg-white/10 border border-white/10 text-white font-black py-4 rounded-2xl active:scale-95 transition-transform"
+              >
+                Not now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Escrow Payment Modal */}
       {buyingProduct && (
         <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-in zoom-in duration-300">
@@ -347,12 +494,109 @@ const Marketplace: React.FC = () => {
              </div>
 
              <button 
-               onClick={() => { alert("Payment sent to Escrow! ✅"); setBuyingProduct(null); }}
+               onClick={() => {
+                 const order = createOrderForProduct(buyingProduct);
+                 setBuyingProduct(null);
+                 setShowOrders(true);
+                 setActiveTrackingOrderId(order.id);
+                 alert(`Payment sent to Escrow! ✅\nTracking: ${order.trackingNumber}`);
+               }}
                className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:scale-105 transition-transform"
              >
                Pay Securely 💳
              </button>
            </div>
+        </div>
+      )}
+
+      {/* Orders / Tracking Modal */}
+      {showOrders && (
+        <div className="absolute inset-0 z-50 bg-[#0a0a0a] flex flex-col animate-in slide-in-from-bottom duration-300">
+          <div className="w-full flex justify-between items-center p-4 border-b border-white/10 bg-black/50 backdrop-blur-md">
+            <div>
+              <h2 className="text-lg font-black">My Orders 📦</h2>
+              <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Track your products</p>
+            </div>
+            <button
+              onClick={() => {
+                setShowOrders(false);
+                setActiveTrackingOrderId(null);
+              }}
+              className="bg-white/10 p-2 rounded-full hover:bg-white/20"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto no-scrollbar p-6 pb-24 space-y-6">
+            {orders.length === 0 ? (
+              <div className="bg-white/5 border border-white/10 rounded-3xl p-6 text-center">
+                <Package size={28} className="mx-auto mb-3 text-gray-400" />
+                <p className="font-black">No orders yet</p>
+                <p className="text-sm text-gray-500 mt-1">Buy an item and you’ll see tracking here.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {orders.map((o) => {
+                  const last = o.events[o.events.length - 1];
+                  return (
+                    <button
+                      key={o.id}
+                      onClick={() => setActiveTrackingOrderId(o.id)}
+                      className="w-full text-left bg-white/5 border border-white/10 rounded-[2rem] p-5 flex gap-4 items-center hover:bg-white/10 transition-colors"
+                    >
+                      <img src={o.productImage} className="w-14 h-14 rounded-2xl object-cover border border-white/10" alt={o.productName} />
+                      <div className="flex-1">
+                        <p className="font-black text-sm">{o.productName}</p>
+                        <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mt-1">
+                          {o.trackingNumber} • {last.label}
+                        </p>
+                      </div>
+                      <Truck size={18} className="text-blue-400" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {activeOrder && (
+              <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Tracking</p>
+                    <p className="text-lg font-black">{activeOrder.trackingNumber}</p>
+                  </div>
+                  <button
+                    onClick={() => advanceTracking(activeOrder.id)}
+                    className="px-4 py-2 rounded-xl bg-blue-600 text-white font-black text-[10px] uppercase tracking-widest active:scale-95 transition-transform"
+                  >
+                    Update Status
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {activeOrder.events.slice().reverse().map((e) => (
+                    <div key={e.id} className="flex gap-3">
+                      <div className="w-8 flex items-start justify-center pt-1">
+                        <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.6)]" />
+                      </div>
+                      <div className="flex-1 bg-black/30 border border-white/10 rounded-2xl p-4">
+                        <p className="font-black text-sm">{e.label}</p>
+                        <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mt-1">
+                          {new Date(e.timestamp).toLocaleString()}
+                        </p>
+                        {e.location && (
+                          <p className="text-xs text-gray-300 mt-2 flex items-center gap-2">
+                            <MapPin size={14} className="text-blue-400" /> {e.location}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
