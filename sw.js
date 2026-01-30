@@ -1,8 +1,9 @@
 
-const CACHE_NAME = 'gigavibe-tecno-v1.0.7';
+const CACHE_NAME = 'gigavibe-production-v1.1.0';
 const urlsToCache = [
-  'index.html',
-  'manifest.json'
+  '/',
+  '/index.html',
+  '/manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
