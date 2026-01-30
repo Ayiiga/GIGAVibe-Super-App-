@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Post, TabType } from '../types';
+import { Post, TabType, ContentType } from '../types';
 import { 
   Heart, MessageCircle, Share2, Plus, Sparkles, ShoppingBag, Zap, Camera, 
   Video, X, ChevronRight, Music, DollarSign, Wand2, Loader2, Send, Upload, 
@@ -9,7 +9,8 @@ import {
   Gamepad2, RefreshCw, FlipHorizontal, UserCircle2, Settings, ShieldAlert, 
   BadgeCheck, Disc, Play, Pause, Search as SearchIcon, Radio, Share, 
   Link as LinkIcon, Instagram, MessageSquare, Mail, Download, CheckCircle2,
-  UserRoundPlus, UserRoundCheck, Check, Smile, RefreshCcw, Tag, Rocket, TrendingUp
+  UserRoundPlus, UserRoundCheck, Check, Smile, RefreshCcw, Tag, Rocket, TrendingUp,
+  Film, Image, Clock, Mic, Volume2, VolumeX, Headphones, FileVideo, FileImage, FileAudio
 } from 'lucide-react';
 import { gemini } from '../services/geminiService';
 import LiveHost from './LiveHost';
@@ -35,6 +36,11 @@ interface SocialPost extends Post {
   isFollowing: boolean;
   isBoostedPost?: boolean;
   commentList: Comment[];
+  contentType?: ContentType;
+  audioUrl?: string;
+  duration?: number;
+  isStory?: boolean;
+  expiresAt?: string;
 }
 
 const QUICK_EMOJIS = ['❤️', '🔥', '👏', '😂', '💯', '✨', '🙌', '😮', '🚀', '😍', '✅'];
@@ -88,14 +94,29 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [showBoostModal, setShowBoostModal] = useState<string | null>(null);
   const [boostBudget, setBoostBudget] = useState(25);
+  const [boostDays, setBoostDays] = useState(3);
   const [newCommentText, setNewCommentText] = useState('');
   const [showCamera, setShowCamera] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState<string | null>(null); 
   const [toast, setToast] = useState<string | null>(null);
+  
+  // Creator Content Upload States
+  const [contentType, setContentType] = useState<ContentType>('photo');
+  const [showContentPicker, setShowContentPicker] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [isShort, setIsShort] = useState(false);
+  const [isStory, setIsStory] = useState(false);
+  const [audioDuration, setAudioDuration] = useState(0);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const commentEndRef = useRef<HTMLDivElement>(null);
 
   // Manage Camera Stream
@@ -151,27 +172,91 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
     }
   };
 
+  // Audio Recording Functions
+  const startAudioRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const url = URL.createObjectURL(audioBlob);
+        setAudioUrl(url);
+        setAudioDuration(recordingTime);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+    } catch (err) {
+      console.error("Audio recording failed:", err);
+      showFeedback("Microphone access denied 🚫");
+    }
+  };
+
+  const stopAudioRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  // Recording timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isRecording) {
+      interval = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
   const handlePostSubmit = () => {
-    if (!previewMedia) return;
+    if (!previewMedia && !audioUrl) return;
+    
     const newPost: SocialPost = {
       id: Date.now().toString(),
       username: '@ayiiga_benard',
       avatar: 'https://picsum.photos/seed/user1/200',
-      contentUrl: previewMedia.url,
-      caption: caption || 'Check out my new post on GIGAVibe! ✨',
+      contentUrl: previewMedia?.url || 'https://picsum.photos/seed/audio/400/400',
+      caption: caption || `Check out my new ${contentType} on GIGAVibe! ✨`,
       likes: 0,
       comments: 0,
       shares: 0,
-      isVideo: previewMedia.type === 'video',
+      isVideo: previewMedia?.type === 'video' || contentType === 'video' || contentType === 'short',
       isLiked: false,
       isFollowing: false,
-      commentList: []
+      commentList: [],
+      contentType: contentType,
+      audioUrl: audioUrl || undefined,
+      duration: audioDuration || undefined,
+      isStory: isStory,
+      expiresAt: isStory ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : undefined
     };
+    
     setPosts([newPost, ...posts]);
     setShowUpload(false);
+    setShowContentPicker(false);
     setPreviewMedia(null);
+    setAudioUrl(null);
     setCaption('');
-    showFeedback("Vibe Posted Successfully! 🚀");
+    setContentType('photo');
+    setIsShort(false);
+    setIsStory(false);
+    setAudioDuration(0);
+    
+    const typeLabel = isStory ? 'Story' : isShort ? 'Short' : contentType.charAt(0).toUpperCase() + contentType.slice(1);
+    showFeedback(`${typeLabel} Posted Successfully! 🚀`);
   };
 
   const toggleLike = (postId: string) => {
@@ -214,8 +299,12 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
 
   const handleBoostSubmit = () => {
     setPosts(prev => prev.map(p => p.id === showBoostModal ? { ...p, isBoostedPost: true } : p));
-    showFeedback(`Post Boosted! Estimated reach: ${(boostBudget * 125).toLocaleString()} vibes 🚀`);
+    const totalCost = boostBudget * boostDays;
+    const estimatedReach = (boostBudget * 150 * boostDays).toLocaleString();
+    showFeedback(`Boosted for $${totalCost}! Est. reach: ${estimatedReach} impressions over ${boostDays} days 🚀`);
     setShowBoostModal(null);
+    setBoostBudget(25);
+    setBoostDays(3);
   };
 
   const handleShareAction = (platform: string, postId: string) => {
@@ -346,60 +435,111 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
         </div>
       </div>
 
-      {/* Boost Post Modal */}
+      {/* Boost Post Modal - Enhanced with $1-$100 range and days */}
       {showBoostModal && (
         <div className="fixed inset-0 z-[2600] bg-black/80 backdrop-blur-md flex items-end animate-in fade-in duration-300" onClick={() => setShowBoostModal(null)}>
-          <div className="w-full bg-[#0a0a0a] rounded-t-[3rem] border-t border-white/10 flex flex-col animate-in slide-in-from-bottom duration-500" onClick={e => e.stopPropagation()}>
-            <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto my-6" />
+          <div className="w-full bg-[#0a0a0a] rounded-t-[3rem] border-t border-white/10 flex flex-col animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto my-6 shrink-0" />
             <div className="px-8 pb-12">
                <div className="flex items-center gap-3 mb-6">
                   <div className="p-3 bg-yellow-500/20 rounded-2xl text-yellow-500 border border-yellow-500/20 shadow-[0_0_20px_rgba(234,179,8,0.2)]">
                     <Rocket size={24} />
                   </div>
                   <div>
-                    <h3 className="text-xl font-black italic tracking-tighter text-white">Boost Vibe Reach 🚀</h3>
+                    <h3 className="text-xl font-black italic tracking-tighter text-white">Boost Your Vibe 🚀</h3>
                     <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Creator Growth Suite</p>
                   </div>
                </div>
 
-               <div className="space-y-6 mb-10">
+               <div className="space-y-6 mb-8">
+                  {/* Budget Selection - $1 to $100 */}
                   <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
-                     <div className="flex justify-between items-center mb-4">
-                        <span className="text-sm font-bold text-gray-400">Ad Budget (GH₵)</span>
-                        <span className="text-2xl font-black text-white">GH₵ {boostBudget}</span>
+                     <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-bold text-gray-400">Boost Budget 💰</span>
+                        <span className="text-3xl font-black text-green-400">${boostBudget}</span>
                      </div>
+                     <p className="text-[10px] text-gray-500 mb-4">Choose how much to invest (starting from $1)</p>
                      <input 
                        type="range" 
-                       min="5" 
-                       max="500" 
-                       step="5"
+                       min="1" 
+                       max="100" 
+                       step="1"
                        value={boostBudget}
                        onChange={(e) => setBoostBudget(parseInt(e.target.value))}
-                       className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                       className="w-full h-3 bg-white/10 rounded-lg appearance-none cursor-pointer accent-green-500"
                      />
-                     <div className="flex justify-between mt-4">
-                        <div className="text-center flex-1 border-r border-white/5">
-                           <p className="text-xl font-black text-blue-400">{(boostBudget * 125).toLocaleString()}</p>
-                           <p className="text-[8px] text-gray-500 uppercase font-black">Est. Reach</p>
+                     <div className="flex justify-between mt-2 text-[10px] text-gray-500 font-bold">
+                        <span>$1</span>
+                        <span>$25</span>
+                        <span>$50</span>
+                        <span>$75</span>
+                        <span>$100</span>
+                     </div>
+                  </div>
+
+                  {/* Days Selection */}
+                  <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                     <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-bold text-gray-400">Boost Duration ⏱️</span>
+                        <span className="text-2xl font-black text-purple-400">{boostDays} Day{boostDays > 1 ? 's' : ''}</span>
+                     </div>
+                     <p className="text-[10px] text-gray-500 mb-4">How long should we promote your content?</p>
+                     <div className="grid grid-cols-5 gap-2">
+                        {[1, 3, 5, 7, 14].map(days => (
+                          <button
+                            key={days}
+                            onClick={() => setBoostDays(days)}
+                            className={`py-3 rounded-xl text-sm font-black transition-all ${
+                              boostDays === days 
+                                ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/50' 
+                                : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                            }`}
+                          >
+                            {days}d
+                          </button>
+                        ))}
+                     </div>
+                  </div>
+
+                  {/* Estimated Results */}
+                  <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-5 rounded-2xl border border-white/10">
+                     <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4">Estimated Results 📊</h4>
+                     <div className="grid grid-cols-3 gap-4">
+                        <div className="text-center">
+                           <p className="text-2xl font-black text-blue-400">{(boostBudget * 150 * boostDays).toLocaleString()}</p>
+                           <p className="text-[8px] text-gray-500 uppercase font-black">Impressions</p>
                         </div>
-                        <div className="text-center flex-1">
-                           <p className="text-xl font-black text-purple-400">3 Days</p>
-                           <p className="text-[8px] text-gray-500 uppercase font-black">Duration</p>
+                        <div className="text-center border-x border-white/10">
+                           <p className="text-2xl font-black text-green-400">{Math.round(boostBudget * 12 * boostDays).toLocaleString()}</p>
+                           <p className="text-[8px] text-gray-500 uppercase font-black">Profile Visits</p>
+                        </div>
+                        <div className="text-center">
+                           <p className="text-2xl font-black text-purple-400">{Math.round(boostBudget * 5 * boostDays).toLocaleString()}</p>
+                           <p className="text-[8px] text-gray-500 uppercase font-black">Engagements</p>
                         </div>
                      </div>
                   </div>
 
-                  <div className="flex items-start gap-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
-                     <TrendingUp className="text-blue-400 shrink-0" size={18} />
-                     <p className="text-xs text-blue-100/70 leading-relaxed">Boosted vibes appear 4x more frequently in the <span className="text-white font-bold">Arena Discover</span> feed and target similar creators.</p>
+                  <div className="flex items-start gap-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl">
+                     <TrendingUp className="text-yellow-400 shrink-0" size={18} />
+                     <p className="text-xs text-yellow-100/70 leading-relaxed">Boosted content appears on the <span className="text-white font-bold">Discover Feed</span>, Stories, and targeted to users who engage with similar content.</p>
+                  </div>
+
+                  {/* Total Cost Summary */}
+                  <div className="bg-white/5 p-4 rounded-2xl border border-white/10 flex justify-between items-center">
+                     <div>
+                        <p className="text-sm font-bold text-white">Total Cost</p>
+                        <p className="text-[10px] text-gray-500">${boostBudget} × {boostDays} day{boostDays > 1 ? 's' : ''}</p>
+                     </div>
+                     <p className="text-3xl font-black text-white">${boostBudget * boostDays}</p>
                   </div>
                </div>
 
                <button 
                 onClick={handleBoostSubmit}
-                className="w-full bg-white text-black font-black py-5 rounded-2xl shadow-2xl active:scale-95 transition-transform flex items-center justify-center gap-3 group"
+                className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 text-black font-black py-5 rounded-2xl shadow-2xl active:scale-95 transition-transform flex items-center justify-center gap-3 group"
                >
-                 <Zap size={20} className="group-hover:fill-current" /> CONFIRM GIGABOOST
+                 <Zap size={20} className="group-hover:fill-current" /> BOOST FOR ${boostBudget * boostDays} 🚀
                </button>
             </div>
           </div>
@@ -408,31 +548,122 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
 
       {/* Creation FAB - Moved up for better access */}
       <button 
-        onClick={() => setIsMenuOpen(!isMenuOpen)}
+        onClick={() => setShowContentPicker(!showContentPicker)}
         className={`absolute bottom-28 right-6 p-5 rounded-full shadow-[0_0_30px_rgba(37,99,235,0.6)] transition-all active:scale-95 flex items-center justify-center z-[70] ${
-          isMenuOpen ? 'bg-white text-black rotate-45' : 'bg-blue-600 text-white'
+          showContentPicker ? 'bg-white text-black rotate-45' : 'bg-blue-600 text-white'
         }`}
       >
-        {isMenuOpen ? <X size={28} /> : <Camera size={28} />}
+        {showContentPicker ? <X size={28} /> : <Plus size={28} />}
       </button>
 
-      {/* Expanded Menu - Higher positioning */}
-      {isMenuOpen && (
-        <div className="absolute bottom-48 right-6 flex flex-col items-end gap-5 z-[70] animate-in slide-in-from-bottom-8">
-           <button onClick={() => { setIsLive(true); setIsMenuOpen(false); }} className="bg-red-600 text-white p-5 rounded-full shadow-[0_0_30_px_rgba(220,38,38,0.5)] flex items-center gap-3 active:scale-90 transition-transform border border-red-400/30">
-              <span className="text-[11px] font-black uppercase tracking-widest mr-1">Start Live 🎥</span>
-              <Radio size={24} className="animate-pulse" />
-           </button>
-           
-           <button onClick={() => { setShowCamera(true); setIsMenuOpen(false); }} className="bg-white/10 backdrop-blur-2xl text-white p-5 rounded-full shadow-2xl flex items-center gap-3 active:scale-90 transition-transform border border-white/20">
-              <span className="text-[11px] font-black uppercase tracking-widest mr-1">Camera 📸</span>
-              <Video size={24}/>
-           </button>
-           
-           <button onClick={() => { fileInputRef.current?.click(); setIsMenuOpen(false); }} className="bg-purple-600 text-white p-5 rounded-full shadow-2xl flex items-center gap-3 active:scale-90 transition-transform border border-purple-400/20">
-              <span className="text-[11px] font-black uppercase tracking-widest mr-1">Gallery 📁</span>
-              <Upload size={24}/>
-           </button>
+      {/* Creator Content Type Picker - Full screen overlay */}
+      {showContentPicker && (
+        <div className="fixed inset-0 z-[2000] bg-black/95 backdrop-blur-xl flex flex-col animate-in fade-in duration-300">
+          <div className="p-6 pt-12 flex justify-between items-center border-b border-white/10">
+            <h2 className="text-2xl font-black italic tracking-tighter">Create Content ✨</h2>
+            <button onClick={() => setShowContentPicker(false)} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors">
+              <X size={24} />
+            </button>
+          </div>
+          
+          <div className="flex-1 p-6 overflow-y-auto no-scrollbar">
+            <p className="text-gray-400 text-sm mb-6">Choose what type of content you want to create</p>
+            
+            <div className="grid grid-cols-2 gap-4 mb-8">
+              {/* Photo */}
+              <button 
+                onClick={() => { setContentType('photo'); setShowCamera(true); setShowContentPicker(false); }}
+                className="bg-gradient-to-br from-pink-600/20 to-purple-600/20 border border-pink-500/30 rounded-3xl p-6 flex flex-col items-center gap-3 hover:scale-[1.02] transition-transform active:scale-95"
+              >
+                <div className="p-4 bg-pink-500/20 rounded-2xl">
+                  <Image size={32} className="text-pink-400" />
+                </div>
+                <span className="font-black text-white">Photo 📸</span>
+                <span className="text-[10px] text-gray-400">Capture moments</span>
+              </button>
+
+              {/* Video */}
+              <button 
+                onClick={() => { setContentType('video'); fileInputRef.current?.setAttribute('accept', 'video/*'); fileInputRef.current?.click(); setShowContentPicker(false); }}
+                className="bg-gradient-to-br from-blue-600/20 to-cyan-600/20 border border-blue-500/30 rounded-3xl p-6 flex flex-col items-center gap-3 hover:scale-[1.02] transition-transform active:scale-95"
+              >
+                <div className="p-4 bg-blue-500/20 rounded-2xl">
+                  <Video size={32} className="text-blue-400" />
+                </div>
+                <span className="font-black text-white">Video 🎬</span>
+                <span className="text-[10px] text-gray-400">Share your story</span>
+              </button>
+
+              {/* Short */}
+              <button 
+                onClick={() => { setContentType('short'); setIsShort(true); fileInputRef.current?.setAttribute('accept', 'video/*'); fileInputRef.current?.click(); setShowContentPicker(false); }}
+                className="bg-gradient-to-br from-red-600/20 to-orange-600/20 border border-red-500/30 rounded-3xl p-6 flex flex-col items-center gap-3 hover:scale-[1.02] transition-transform active:scale-95"
+              >
+                <div className="p-4 bg-red-500/20 rounded-2xl">
+                  <Film size={32} className="text-red-400" />
+                </div>
+                <span className="font-black text-white">Short 🎥</span>
+                <span className="text-[10px] text-gray-400">15-60 sec clips</span>
+              </button>
+
+              {/* Story */}
+              <button 
+                onClick={() => { setContentType('story'); setIsStory(true); setShowCamera(true); setShowContentPicker(false); }}
+                className="bg-gradient-to-br from-yellow-600/20 to-amber-600/20 border border-yellow-500/30 rounded-3xl p-6 flex flex-col items-center gap-3 hover:scale-[1.02] transition-transform active:scale-95"
+              >
+                <div className="p-4 bg-yellow-500/20 rounded-2xl">
+                  <Clock size={32} className="text-yellow-400" />
+                </div>
+                <span className="font-black text-white">Story ⏱️</span>
+                <span className="text-[10px] text-gray-400">24hr visibility</span>
+              </button>
+
+              {/* Audio */}
+              <button 
+                onClick={() => { setContentType('audio'); setShowContentPicker(false); setShowUpload(true); }}
+                className="bg-gradient-to-br from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-3xl p-6 flex flex-col items-center gap-3 hover:scale-[1.02] transition-transform active:scale-95 col-span-2"
+              >
+                <div className="p-4 bg-green-500/20 rounded-2xl">
+                  <Headphones size={32} className="text-green-400" />
+                </div>
+                <span className="font-black text-white">Audio 🎵</span>
+                <span className="text-[10px] text-gray-400">Music, podcasts, voice notes</span>
+              </button>
+            </div>
+
+            <div className="border-t border-white/10 pt-6">
+              <h3 className="text-sm font-black uppercase tracking-widest text-gray-500 mb-4">Quick Actions</h3>
+              <div className="space-y-3">
+                <button 
+                  onClick={() => { setIsLive(true); setShowContentPicker(false); }}
+                  className="w-full bg-red-600/20 border border-red-500/30 rounded-2xl p-4 flex items-center gap-4 hover:bg-red-600/30 transition-colors"
+                >
+                  <div className="p-2 bg-red-500/30 rounded-xl">
+                    <Radio size={20} className="text-red-400 animate-pulse" />
+                  </div>
+                  <div className="text-left flex-1">
+                    <span className="font-bold text-white block">Go Live 🔴</span>
+                    <span className="text-[10px] text-gray-400">Stream in real-time</span>
+                  </div>
+                  <ChevronRight size={20} className="text-gray-500" />
+                </button>
+
+                <button 
+                  onClick={() => { fileInputRef.current?.setAttribute('accept', 'image/*,video/*'); fileInputRef.current?.click(); setShowContentPicker(false); }}
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-4 hover:bg-white/10 transition-colors"
+                >
+                  <div className="p-2 bg-purple-500/20 rounded-xl">
+                    <Upload size={20} className="text-purple-400" />
+                  </div>
+                  <div className="text-left flex-1">
+                    <span className="font-bold text-white block">Upload from Gallery 📁</span>
+                    <span className="text-[10px] text-gray-400">Photos & videos from device</span>
+                  </div>
+                  <ChevronRight size={20} className="text-gray-500" />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -471,25 +702,172 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
         }
       }} />
 
-      {/* Post Upload Modal */}
-      {showUpload && previewMedia && (
+      {/* Post Upload Modal - Enhanced for all content types */}
+      {showUpload && (
         <div className="fixed inset-0 z-[2000] bg-black animate-in slide-in-from-bottom duration-300 flex flex-col">
           <div className="p-6 pt-12 flex justify-between items-center border-b border-white/10">
-             <button onClick={() => { setShowUpload(false); setPreviewMedia(null); }} className="p-2 bg-white/5 rounded-full"><X size={20}/></button>
-             <h3 className="font-black italic tracking-tighter text-white">New GIGAVibe ✨</h3>
-             <button onClick={handlePostSubmit} className="bg-blue-600 px-6 py-2 rounded-full font-black text-sm shadow-lg shadow-blue-900/40 text-white">Post 🚀</button>
+             <button onClick={() => { setShowUpload(false); setPreviewMedia(null); setAudioUrl(null); setContentType('photo'); }} className="p-2 bg-white/5 rounded-full"><X size={20}/></button>
+             <h3 className="font-black italic tracking-tighter text-white">
+               New {contentType === 'audio' ? 'Audio 🎵' : isStory ? 'Story ⏱️' : isShort ? 'Short 🎥' : 'GIGAVibe ✨'}
+             </h3>
+             <button 
+               onClick={handlePostSubmit} 
+               disabled={!previewMedia && !audioUrl}
+               className="bg-blue-600 px-6 py-2 rounded-full font-black text-sm shadow-lg shadow-blue-900/40 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+             >
+               Post 🚀
+             </button>
           </div>
           <div className="flex-1 p-6 space-y-6 overflow-y-auto no-scrollbar pb-32">
-             <div className="relative rounded-[2.5rem] overflow-hidden aspect-[3/4] border border-white/10 shadow-2xl">
-                <img src={previewMedia.url} className="w-full h-full object-cover" alt="Preview" />
-                <button onClick={() => setShowCamera(true)} className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-6 py-2 rounded-full font-black text-xs flex items-center gap-2 text-white"><RefreshCcw size={14} /> Retake</button>
-             </div>
+             {/* Audio Recording UI */}
+             {contentType === 'audio' && (
+               <div className="bg-gradient-to-br from-green-900/30 to-emerald-900/30 rounded-[2.5rem] p-8 border border-green-500/30">
+                 <div className="flex flex-col items-center">
+                   {!audioUrl ? (
+                     <>
+                       <div className={`w-32 h-32 rounded-full flex items-center justify-center mb-6 transition-all ${isRecording ? 'bg-red-500/30 animate-pulse' : 'bg-green-500/20'}`}>
+                         {isRecording ? (
+                           <div className="text-center">
+                             <Mic size={48} className="text-red-400 mx-auto animate-pulse" />
+                             <p className="text-2xl font-black text-white mt-2">{Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}</p>
+                           </div>
+                         ) : (
+                           <Mic size={48} className="text-green-400" />
+                         )}
+                       </div>
+                       
+                       {isRecording ? (
+                         <button 
+                           onClick={stopAudioRecording}
+                           className="bg-red-600 text-white px-8 py-4 rounded-2xl font-black flex items-center gap-3 shadow-lg shadow-red-900/50"
+                         >
+                           <VolumeX size={24} /> Stop Recording
+                         </button>
+                       ) : (
+                         <button 
+                           onClick={startAudioRecording}
+                           className="bg-green-600 text-white px-8 py-4 rounded-2xl font-black flex items-center gap-3 shadow-lg shadow-green-900/50"
+                         >
+                           <Mic size={24} /> Start Recording 🎙️
+                         </button>
+                       )}
+                       
+                       <p className="text-[10px] text-gray-400 mt-4 text-center">
+                         Or upload an audio file from your device
+                       </p>
+                       <button 
+                         onClick={() => audioInputRef.current?.click()}
+                         className="mt-3 bg-white/5 border border-white/10 px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-white/10 transition-colors"
+                       >
+                         <Upload size={16} /> Upload Audio 📁
+                       </button>
+                       <input 
+                         ref={audioInputRef}
+                         type="file" 
+                         accept="audio/*" 
+                         className="hidden"
+                         onChange={(e) => {
+                           const file = e.target.files?.[0];
+                           if (file) {
+                             const url = URL.createObjectURL(file);
+                             setAudioUrl(url);
+                             // Get audio duration
+                             const audio = new Audio(url);
+                             audio.onloadedmetadata = () => {
+                               setAudioDuration(Math.round(audio.duration));
+                             };
+                           }
+                         }}
+                       />
+                     </>
+                   ) : (
+                     <>
+                       <div className="w-full bg-white/5 rounded-2xl p-4 mb-4">
+                         <div className="flex items-center gap-4">
+                           <div className="p-3 bg-green-500/20 rounded-xl">
+                             <Volume2 size={24} className="text-green-400" />
+                           </div>
+                           <div className="flex-1">
+                             <p className="font-bold text-white">Audio Ready 🎵</p>
+                             <p className="text-xs text-gray-400">Duration: {Math.floor(audioDuration / 60)}:{(audioDuration % 60).toString().padStart(2, '0')}</p>
+                           </div>
+                           <audio src={audioUrl} controls className="w-32 h-8" />
+                         </div>
+                       </div>
+                       <button 
+                         onClick={() => { setAudioUrl(null); setAudioDuration(0); }}
+                         className="text-red-400 text-sm font-bold flex items-center gap-2"
+                       >
+                         <RefreshCcw size={14} /> Re-record
+                       </button>
+                     </>
+                   )}
+                 </div>
+
+                 {/* Add cover image for audio */}
+                 <div className="mt-6 pt-6 border-t border-white/10">
+                   <p className="text-sm font-bold text-gray-400 mb-3">Add Cover Image (Optional) 🖼️</p>
+                   <button 
+                     onClick={() => { fileInputRef.current?.setAttribute('accept', 'image/*'); fileInputRef.current?.click(); }}
+                     className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-center gap-3 hover:bg-white/10 transition-colors"
+                   >
+                     {previewMedia ? (
+                       <img src={previewMedia.url} className="w-16 h-16 rounded-xl object-cover" alt="Cover" />
+                     ) : (
+                       <>
+                         <ImagePlus size={20} className="text-gray-400" />
+                         <span className="text-sm text-gray-400">Add Cover Art</span>
+                       </>
+                     )}
+                   </button>
+                 </div>
+               </div>
+             )}
+
+             {/* Image/Video Preview */}
+             {contentType !== 'audio' && previewMedia && (
+               <div className="relative rounded-[2.5rem] overflow-hidden aspect-[3/4] border border-white/10 shadow-2xl">
+                  {previewMedia.type === 'video' ? (
+                    <video src={previewMedia.url} className="w-full h-full object-cover" controls autoPlay loop muted playsInline />
+                  ) : (
+                    <img src={previewMedia.url} className="w-full h-full object-cover" alt="Preview" />
+                  )}
+                  {isStory && (
+                    <div className="absolute top-4 left-4 bg-yellow-500/90 px-3 py-1 rounded-full flex items-center gap-2">
+                      <Clock size={12} />
+                      <span className="text-[10px] font-black uppercase">24hr Story</span>
+                    </div>
+                  )}
+                  {isShort && (
+                    <div className="absolute top-4 left-4 bg-red-500/90 px-3 py-1 rounded-full flex items-center gap-2">
+                      <Film size={12} />
+                      <span className="text-[10px] font-black uppercase">Short</span>
+                    </div>
+                  )}
+                  <button onClick={() => setShowCamera(true)} className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-6 py-2 rounded-full font-black text-xs flex items-center gap-2 text-white"><RefreshCcw size={14} /> Retake</button>
+               </div>
+             )}
+             
              <textarea 
                value={caption}
                onChange={e => setCaption(e.target.value)}
-               placeholder="Write a caption... #GIGAVibe ✍️"
+               placeholder={contentType === 'audio' ? "Add a title or description... 🎵" : "Write a caption... #GIGAVibe ✍️"}
                className="w-full bg-white/5 border border-white/10 rounded-[2rem] p-6 h-32 focus:outline-none focus:border-blue-500 outline-none text-sm resize-none text-white"
              />
+
+             {/* Content Type Badge */}
+             <div className="flex items-center gap-2 text-gray-400">
+               <span className="text-[10px] font-black uppercase tracking-widest">Posting as:</span>
+               <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+                 contentType === 'photo' ? 'bg-pink-500/20 text-pink-400' :
+                 contentType === 'video' ? 'bg-blue-500/20 text-blue-400' :
+                 contentType === 'short' ? 'bg-red-500/20 text-red-400' :
+                 contentType === 'story' ? 'bg-yellow-500/20 text-yellow-400' :
+                 'bg-green-500/20 text-green-400'
+               }`}>
+                 {isStory ? 'Story' : isShort ? 'Short' : contentType}
+               </span>
+             </div>
           </div>
         </div>
       )}

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Transaction } from '../types';
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from 'recharts';
-import { ArrowUpRight, ArrowDownLeft, DollarSign, Wallet as WalletIcon, Zap, TrendingUp, ChevronRight, Info, Lock, Fingerprint, ShieldCheck, Loader2, Delete, Mail, Smartphone, ArrowLeft, KeyRound, User, Send, CheckCircle, X, Shield, Scan } from 'lucide-react';
+import { ArrowUpRight, ArrowDownLeft, DollarSign, Wallet as WalletIcon, Zap, TrendingUp, ChevronRight, Info, Lock, Fingerprint, ShieldCheck, Loader2, Delete, Mail, Smartphone, ArrowLeft, KeyRound, User, Send, CheckCircle, X, Shield, Scan, Settings, Edit3, Key, CheckCircle2 } from 'lucide-react';
 
 const MOCK_DATA = [
   { name: 'Mon', earnings: 400 },
@@ -15,11 +15,31 @@ const MOCK_DATA = [
 ];
 
 const Wallet: React.FC = () => {
+  // Check if user has set up their PIN
+  const [isPinSetup, setIsPinSetup] = useState<boolean>(() => {
+    return localStorage.getItem('gigavibe_pin_setup') === 'true';
+  });
+  const [savedPin, setSavedPin] = useState<string>(() => {
+    return localStorage.getItem('gigavibe_user_pin') || '1234';
+  });
+  
   const [isLocked, setIsLocked] = useState(true);
   const [pin, setPin] = useState('');
   const [isShaking, setIsShaking] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'success'>('idle');
+  
+  // PIN Setup/Edit State
+  const [showPinSetup, setShowPinSetup] = useState(false);
+  const [pinSetupStep, setPinSetupStep] = useState<'create' | 'confirm' | 'success'>('create');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinSetupError, setPinSetupError] = useState('');
+  
+  // Change PIN State (for existing users)
+  const [showChangePinModal, setShowChangePinModal] = useState(false);
+  const [changePinStep, setChangePinStep] = useState<'current' | 'new' | 'confirm' | 'success'>('current');
+  const [currentPinInput, setCurrentPinInput] = useState('');
   
   // Withdrawal State
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -36,14 +56,111 @@ const Wallet: React.FC = () => {
   const [otpCode, setOtpCode] = useState('');
   const [newPinEntry, setNewPinEntry] = useState('');
 
+  // Handle PIN setup for new users
+  const handlePinSetupEntry = (num: string) => {
+    if (pinSetupStep === 'create') {
+      if (newPin.length < 4) {
+        const updated = newPin + num;
+        setNewPin(updated);
+        if (updated.length === 4) {
+          setTimeout(() => setPinSetupStep('confirm'), 300);
+        }
+      }
+    } else if (pinSetupStep === 'confirm') {
+      if (confirmPin.length < 4) {
+        const updated = confirmPin + num;
+        setConfirmPin(updated);
+        if (updated.length === 4) {
+          setTimeout(() => {
+            if (updated === newPin) {
+              // Save the PIN
+              localStorage.setItem('gigavibe_user_pin', newPin);
+              localStorage.setItem('gigavibe_pin_setup', 'true');
+              setSavedPin(newPin);
+              setIsPinSetup(true);
+              setPinSetupStep('success');
+              setTimeout(() => {
+                setShowPinSetup(false);
+                setPinSetupStep('create');
+                setNewPin('');
+                setConfirmPin('');
+                setIsLocked(false);
+              }, 2000);
+            } else {
+              setPinSetupError("PINs don't match. Try again.");
+              setConfirmPin('');
+              setTimeout(() => setPinSetupError(''), 2000);
+            }
+          }, 300);
+        }
+      }
+    }
+  };
+
+  // Handle Change PIN for existing users
+  const handleChangePinEntry = (num: string) => {
+    if (changePinStep === 'current') {
+      if (currentPinInput.length < 4) {
+        const updated = currentPinInput + num;
+        setCurrentPinInput(updated);
+        if (updated.length === 4) {
+          setTimeout(() => {
+            if (updated === savedPin) {
+              setChangePinStep('new');
+              setCurrentPinInput('');
+            } else {
+              setPinSetupError("Incorrect current PIN");
+              setCurrentPinInput('');
+              setTimeout(() => setPinSetupError(''), 2000);
+            }
+          }, 300);
+        }
+      }
+    } else if (changePinStep === 'new') {
+      if (newPin.length < 4) {
+        const updated = newPin + num;
+        setNewPin(updated);
+        if (updated.length === 4) {
+          setTimeout(() => setChangePinStep('confirm'), 300);
+        }
+      }
+    } else if (changePinStep === 'confirm') {
+      if (confirmPin.length < 4) {
+        const updated = confirmPin + num;
+        setConfirmPin(updated);
+        if (updated.length === 4) {
+          setTimeout(() => {
+            if (updated === newPin) {
+              // Save the new PIN
+              localStorage.setItem('gigavibe_user_pin', newPin);
+              setSavedPin(newPin);
+              setChangePinStep('success');
+              setTimeout(() => {
+                setShowChangePinModal(false);
+                setChangePinStep('current');
+                setNewPin('');
+                setConfirmPin('');
+                setCurrentPinInput('');
+              }, 2000);
+            } else {
+              setPinSetupError("PINs don't match. Try again.");
+              setConfirmPin('');
+              setTimeout(() => setPinSetupError(''), 2000);
+            }
+          }, 300);
+        }
+      }
+    }
+  };
+
   const handlePinEnter = (num: string) => {
     if (pin.length < 4 && !isShaking) {
-      const newPin = pin + num;
-      setPin(newPin);
+      const newPinValue = pin + num;
+      setPin(newPinValue);
       
-      if (newPin.length === 4) {
+      if (newPinValue.length === 4) {
         setTimeout(() => {
-          if (newPin === '1234') {
+          if (newPinValue === savedPin) {
             setIsLocked(false);
             setPin('');
           } else {
@@ -130,6 +247,11 @@ const Wallet: React.FC = () => {
 
   const handleResetComplete = () => {
       if (newPinEntry.length === 4) {
+        // Save the new PIN
+        localStorage.setItem('gigavibe_user_pin', newPinEntry);
+        localStorage.setItem('gigavibe_pin_setup', 'true');
+        setSavedPin(newPinEntry);
+        setIsPinSetup(true);
         alert("PIN Updated Successfully! ✅");
         setForgotPinStep('idle');
         setPin('');
@@ -140,6 +262,114 @@ const Wallet: React.FC = () => {
         alert("Please enter a 4-digit PIN 🛡️");
       }
   };
+  
+  // Show PIN setup for new users
+  useEffect(() => {
+    if (!isPinSetup && isLocked) {
+      setShowPinSetup(true);
+    }
+  }, [isPinSetup, isLocked]);
+
+  // PIN Setup Modal for New Users
+  if (showPinSetup && !isPinSetup) {
+    return (
+      <div className="h-full bg-black flex flex-col items-center justify-center p-8 relative z-50 animate-in fade-in zoom-in duration-500">
+        <style dangerouslySetInnerHTML={{ __html: `
+          @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            50% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(0.8); opacity: 0.5; }
+          }
+        `}} />
+        
+        {pinSetupStep === 'success' ? (
+          <div className="text-center animate-in zoom-in duration-500">
+            <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-green-900/50">
+              <CheckCircle2 size={48} className="text-white" />
+            </div>
+            <h2 className="text-2xl font-black mb-2 text-green-400">PIN Created! 🎉</h2>
+            <p className="text-gray-400">Your wallet is now secured</p>
+          </div>
+        ) : (
+          <>
+            <div className="mb-8 relative">
+              <div className="p-6 bg-gradient-to-br from-blue-600/20 to-purple-600/20 rounded-full border-2 border-blue-500/50 shadow-[0_0_50px_rgba(37,99,235,0.3)]" style={{ animation: 'pulse-ring 2s ease-in-out infinite' }}>
+                <Key size={48} className="text-blue-500" />
+              </div>
+            </div>
+            
+            <h2 className="text-2xl font-black mb-2 tracking-tight">
+              {pinSetupStep === 'create' ? 'Create Your GIGAPIN 🔐' : 'Confirm Your PIN 🔒'}
+            </h2>
+            <p className="text-gray-400 mb-8 text-center text-sm max-w-xs">
+              {pinSetupStep === 'create' 
+                ? 'Set a 4-digit PIN to secure your GIGAVault wallet' 
+                : 'Re-enter your PIN to confirm'}
+            </p>
+
+            {pinSetupError && (
+              <div className="bg-red-500/20 border border-red-500/50 text-red-400 px-4 py-2 rounded-xl mb-6 text-sm font-bold animate-in shake">
+                {pinSetupError}
+              </div>
+            )}
+
+            <div className="flex gap-6 mb-12">
+              {[...Array(4)].map((_, i) => {
+                const currentPin = pinSetupStep === 'create' ? newPin : confirmPin;
+                return (
+                  <div 
+                    key={i} 
+                    className={`w-4 h-4 rounded-full border-2 transition-all duration-300 transform ${
+                      i < currentPin.length 
+                        ? 'bg-blue-500 border-blue-400 scale-125 shadow-[0_0_15px_rgba(59,130,246,0.6)]' 
+                        : 'bg-white/10 border-white/20'
+                    }`} 
+                  />
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-3 gap-6 w-full max-w-xs mb-8">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
+                <button 
+                  key={n} 
+                  onClick={() => handlePinSetupEntry(n.toString())}
+                  className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xl font-bold hover:bg-white/10 hover:border-white/20 active:scale-90 transition-all"
+                >
+                  {n}
+                </button>
+              ))}
+              <div className="h-16 w-16" />
+              <button 
+                onClick={() => handlePinSetupEntry('0')} 
+                className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xl font-bold hover:bg-white/10 hover:border-white/20 active:scale-90 transition-all"
+              >
+                0
+              </button>
+              <button 
+                onClick={() => {
+                  if (pinSetupStep === 'create') setNewPin(prev => prev.slice(0, -1));
+                  else setConfirmPin(prev => prev.slice(0, -1));
+                }} 
+                className="flex items-center justify-center text-gray-500 hover:text-red-400 transition-colors active:scale-90"
+              >
+                <Delete />
+              </button>
+            </div>
+
+            {pinSetupStep === 'confirm' && (
+              <button 
+                onClick={() => { setPinSetupStep('create'); setNewPin(''); setConfirmPin(''); }}
+                className="text-sm text-gray-500 hover:text-white transition-colors"
+              >
+                ← Go back and change PIN
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
 
   if (isLocked) {
     if (forgotPinStep !== 'idle') {
@@ -334,9 +564,18 @@ const Wallet: React.FC = () => {
            <ShieldCheck size={24} className="text-green-500" />
            <h2 className="text-3xl font-black tracking-tighter">GIGACapital 🏦</h2>
         </div>
-        <div className="flex items-center gap-2 bg-yellow-500/20 border border-yellow-500/50 px-4 py-2 rounded-2xl shadow-[0_0_15px_rgba(234,179,8,0.2)]">
-          <Zap size={16} className="text-yellow-500 fill-yellow-500" />
-          <span className="text-sm font-black text-yellow-500 tracking-tighter">GIGA SCORE: 842 ✨</span>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowChangePinModal(true)}
+            className="p-2 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors"
+            title="Change PIN"
+          >
+            <Settings size={18} className="text-gray-400" />
+          </button>
+          <div className="flex items-center gap-2 bg-yellow-500/20 border border-yellow-500/50 px-4 py-2 rounded-2xl shadow-[0_0_15px_rgba(234,179,8,0.2)]">
+            <Zap size={16} className="text-yellow-500 fill-yellow-500" />
+            <span className="text-sm font-black text-yellow-500 tracking-tighter">842 ✨</span>
+          </div>
         </div>
       </div>
 
@@ -564,6 +803,107 @@ const Wallet: React.FC = () => {
                   Back to Wallet ↩️
                 </button>
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Change PIN Modal */}
+      {showChangePinModal && (
+        <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in duration-300">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black">Change PIN 🔐</h3>
+              <button 
+                onClick={() => { 
+                  setShowChangePinModal(false); 
+                  setChangePinStep('current'); 
+                  setCurrentPinInput(''); 
+                  setNewPin(''); 
+                  setConfirmPin(''); 
+                  setPinSetupError('');
+                }} 
+                className="p-2 bg-white/5 rounded-full text-gray-500 hover:text-white transition-colors"
+              >
+                <X size={20}/>
+              </button>
+            </div>
+
+            {changePinStep === 'success' ? (
+              <div className="text-center py-8 animate-in zoom-in duration-500">
+                <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-green-900/50">
+                  <CheckCircle2 size={40} className="text-white" />
+                </div>
+                <h3 className="text-xl font-black text-green-400 mb-2">PIN Changed! ✅</h3>
+                <p className="text-gray-400 text-sm">Your new PIN is now active</p>
+              </div>
+            ) : (
+              <>
+                <div className="mb-6">
+                  <p className="text-center text-gray-400 text-sm mb-2">
+                    {changePinStep === 'current' && 'Enter your current PIN'}
+                    {changePinStep === 'new' && 'Enter your new PIN'}
+                    {changePinStep === 'confirm' && 'Confirm your new PIN'}
+                  </p>
+                  
+                  {pinSetupError && (
+                    <div className="bg-red-500/20 border border-red-500/50 text-red-400 px-4 py-2 rounded-xl text-sm font-bold text-center">
+                      {pinSetupError}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-center gap-4 mb-8">
+                  {[...Array(4)].map((_, i) => {
+                    const currentInput = changePinStep === 'current' ? currentPinInput : changePinStep === 'new' ? newPin : confirmPin;
+                    return (
+                      <div 
+                        key={i} 
+                        className={`w-4 h-4 rounded-full border-2 transition-all duration-300 ${
+                          i < currentInput.length 
+                            ? 'bg-blue-500 border-blue-400 scale-125 shadow-[0_0_10px_rgba(59,130,246,0.5)]' 
+                            : 'bg-white/10 border-white/20'
+                        }`} 
+                      />
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
+                    <button 
+                      key={n} 
+                      onClick={() => handleChangePinEntry(n.toString())}
+                      className="h-14 w-14 mx-auto rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-lg font-bold hover:bg-white/10 active:scale-90 transition-all"
+                    >
+                      {n}
+                    </button>
+                  ))}
+                  <div className="h-14 w-14" />
+                  <button 
+                    onClick={() => handleChangePinEntry('0')} 
+                    className="h-14 w-14 mx-auto rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-lg font-bold hover:bg-white/10 active:scale-90 transition-all"
+                  >
+                    0
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (changePinStep === 'current') setCurrentPinInput(prev => prev.slice(0, -1));
+                      else if (changePinStep === 'new') setNewPin(prev => prev.slice(0, -1));
+                      else setConfirmPin(prev => prev.slice(0, -1));
+                    }} 
+                    className="flex items-center justify-center text-gray-500 hover:text-red-400 transition-colors"
+                  >
+                    <Delete size={20} />
+                  </button>
+                </div>
+
+                <div className="flex gap-2">
+                  <div className={`flex-1 h-1 rounded-full ${changePinStep === 'current' || changePinStep === 'new' || changePinStep === 'confirm' ? 'bg-blue-500' : 'bg-white/10'}`} />
+                  <div className={`flex-1 h-1 rounded-full ${changePinStep === 'new' || changePinStep === 'confirm' ? 'bg-blue-500' : 'bg-white/10'}`} />
+                  <div className={`flex-1 h-1 rounded-full ${changePinStep === 'confirm' ? 'bg-blue-500' : 'bg-white/10'}`} />
+                </div>
+              </>
             )}
           </div>
         </div>
