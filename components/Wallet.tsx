@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Transaction } from '../types';
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { ArrowUpRight, ArrowDownLeft, DollarSign, Wallet as WalletIcon, Zap, TrendingUp, ChevronRight, Info, Lock, Fingerprint, ShieldCheck, Loader2, Delete, Mail, Smartphone, ArrowLeft, KeyRound, User, Send, CheckCircle, X, Shield, Scan } from 'lucide-react';
+import { getCreatorCode, getCreatorStats } from '../services/creatorStats';
 
 const MOCK_DATA = [
   { name: 'Mon', earnings: 400 },
@@ -20,6 +21,11 @@ const Wallet: React.FC = () => {
   const [isShaking, setIsShaking] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'success'>('idle');
+  const [toast, setToast] = useState<string | null>(null);
+  const [creatorStats, setCreatorStats] = useState(() => getCreatorStats());
+  const [creatorCode] = useState(() => getCreatorCode());
+  const [showEarningsInfo, setShowEarningsInfo] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('500.00');
   
   // Withdrawal State
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -35,6 +41,36 @@ const Wallet: React.FC = () => {
   const [forgotPinStep, setForgotPinStep] = useState<'idle' | 'method' | 'otp' | 'new_pin'>('idle');
   const [otpCode, setOtpCode] = useState('');
   const [newPinEntry, setNewPinEntry] = useState('');
+
+  const showFeedback = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleCopyReferral = async () => {
+    const link = `${window.location.origin}?ref=${creatorCode}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Join GIGAVibe', text: 'Create and earn with me on GIGAVibe.', url: link });
+      } else {
+        await navigator.clipboard.writeText(link);
+      }
+      showFeedback('Referral link shared ✅');
+    } catch {
+      await navigator.clipboard.writeText(link);
+      showFeedback('Referral link copied 📋');
+    }
+  };
+
+  useEffect(() => {
+    const syncStats = () => setCreatorStats(getCreatorStats());
+    window.addEventListener('gigavibe-stats-updated', syncStats);
+    window.addEventListener('storage', syncStats);
+    return () => {
+      window.removeEventListener('gigavibe-stats-updated', syncStats);
+      window.removeEventListener('storage', syncStats);
+    };
+  }, []);
 
   const handlePinEnter = (num: string) => {
     if (pin.length < 4 && !isShaking) {
@@ -76,9 +112,16 @@ const Wallet: React.FC = () => {
   const startWithdrawal = () => {
     setShowWithdrawModal(true);
     setWithdrawStep('amount');
+    if (creatorStats.earnings > 0) {
+      setWithdrawAmount(creatorStats.earnings.toFixed(2));
+    }
   };
 
   const processWithdrawal = () => {
+    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
+      showFeedback('Enter a valid amount 💰');
+      return;
+    }
     setWithdrawStep('fraud_check');
     setTimeout(() => {
       setWithdrawStep('otp');
@@ -101,10 +144,10 @@ const Wallet: React.FC = () => {
 
   const nextTransferStep = () => {
     if (transferStep === 'recipient') {
-      if (!recipientId.trim()) return alert("Enter a valid GIGA ID 🆔");
+      if (!recipientId.trim()) return showFeedback("Enter a valid GIGA ID 🆔");
       setTransferStep('amount');
     } else if (transferStep === 'amount') {
-      if (!transferAmount || parseFloat(transferAmount) <= 0) return alert("Enter a valid amount 💰");
+      if (!transferAmount || parseFloat(transferAmount) <= 0) return showFeedback("Enter a valid amount 💰");
       setTransferStep('processing');
       setTimeout(() => {
         setTransferStep('success');
@@ -124,20 +167,20 @@ const Wallet: React.FC = () => {
       if (otpCode.length === 4) {
         setForgotPinStep('new_pin');
       } else {
-        alert("Please enter a 4-digit code (any code works for demo) 🔑");
+        showFeedback("Please enter a 4-digit code (any code works for demo) 🔑");
       }
   };
 
   const handleResetComplete = () => {
       if (newPinEntry.length === 4) {
-        alert("PIN Updated Successfully! ✅");
+        showFeedback("PIN Updated Successfully! ✅");
         setForgotPinStep('idle');
         setPin('');
         setNewPinEntry('');
         setOtpCode('');
         setIsLocked(false);
       } else {
-        alert("Please enter a 4-digit PIN 🛡️");
+        showFeedback("Please enter a 4-digit PIN 🛡️");
       }
   };
 
@@ -145,6 +188,11 @@ const Wallet: React.FC = () => {
     if (forgotPinStep !== 'idle') {
       return (
         <div className="h-full bg-black flex flex-col items-center justify-center p-8 relative z-50 animate-in fade-in slide-in-from-bottom-4">
+            {toast && (
+              <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[3000] bg-white text-black px-6 py-3 rounded-full shadow-2xl text-xs font-black uppercase tracking-widest">
+                {toast}
+              </div>
+            )}
             <button onClick={() => setForgotPinStep('idle')} className="absolute top-8 left-8 p-2 bg-white/10 rounded-full text-white hover:bg-white/20 transition-colors">
                 <ArrowLeft size={24} />
             </button>
@@ -216,6 +264,11 @@ const Wallet: React.FC = () => {
 
     return (
       <div className="h-full bg-black flex flex-col items-center justify-center p-8 relative z-50">
+        {toast && (
+          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[3000] bg-white text-black px-6 py-3 rounded-full shadow-2xl text-xs font-black uppercase tracking-widest">
+            {toast}
+          </div>
+        )}
         <style dangerouslySetInnerHTML={{ __html: `
           @keyframes shake {
             0%, 100% { transform: translateX(0); }
@@ -329,6 +382,11 @@ const Wallet: React.FC = () => {
 
   return (
     <div className="h-full bg-black overflow-y-auto p-6 pt-24 pb-32 animate-in fade-in duration-500">
+      {toast && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[3000] bg-white text-black px-6 py-3 rounded-full shadow-2xl text-xs font-black uppercase tracking-widest">
+          {toast}
+        </div>
+      )}
       <div className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-2">
            <ShieldCheck size={24} className="text-green-500" />
@@ -365,11 +423,47 @@ const Wallet: React.FC = () => {
         </div>
       </div>
 
+      <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6 mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h4 className="text-sm font-black uppercase tracking-widest text-gray-400">Creator Freedom</h4>
+            <p className="text-xs text-gray-500">Track earnings from recommendations.</p>
+          </div>
+          <button onClick={() => { setCreatorStats(getCreatorStats()); showFeedback('Creator stats synced'); }} className="text-[10px] font-black uppercase tracking-widest text-blue-400">
+            Sync
+          </button>
+        </div>
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
+            <p className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Earned</p>
+            <p className="text-sm font-black text-green-400">GH₵ {creatorStats.earnings.toLocaleString()}</p>
+          </div>
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
+            <p className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Recs</p>
+            <p className="text-sm font-black text-blue-400">{creatorStats.recommendations}</p>
+          </div>
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
+            <p className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Referrals</p>
+            <p className="text-sm font-black text-purple-400">{creatorStats.referrals}</p>
+          </div>
+        </div>
+        <div className="bg-black/40 border border-white/10 rounded-2xl p-3 mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-[9px] text-gray-500 font-black uppercase tracking-widest">Creator Code</p>
+            <p className="text-sm font-black text-white">{creatorCode}</p>
+          </div>
+          <button onClick={handleCopyReferral} className="bg-blue-600 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest">Invite</button>
+        </div>
+        <button onClick={startWithdrawal} className="w-full bg-white text-black font-black py-3 rounded-2xl">Cash Out Earnings</button>
+      </div>
+
       {/* Payout Transparency Breakdown */}
       <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6 mb-8">
         <div className="flex items-center justify-between mb-4">
           <h4 className="text-sm font-black uppercase tracking-widest text-gray-400">Earnings Breakdown 📝</h4>
-          <Info size={16} className="text-gray-600" />
+          <button onClick={() => setShowEarningsInfo(true)} className="text-gray-600 hover:text-white transition-colors">
+            <Info size={16} />
+          </button>
         </div>
         <div className="space-y-4">
           {[
@@ -426,7 +520,13 @@ const Wallet: React.FC = () => {
             {withdrawStep === 'amount' && (
               <>
                 <p className="text-xs text-gray-500 mb-2 uppercase font-black">Enter Amount (GH₵) 💰</p>
-                <input type="number" placeholder="0.00" className="w-full bg-white/5 p-4 rounded-xl mb-6 text-2xl font-mono border border-white/10 focus:border-blue-500 outline-none" defaultValue="500.00" />
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  className="w-full bg-white/5 p-4 rounded-xl mb-6 text-2xl font-mono border border-white/10 focus:border-blue-500 outline-none"
+                />
                 <button onClick={processWithdrawal} className="w-full bg-white text-black font-black py-4 rounded-xl shadow-lg hover:bg-gray-200 transition-colors">Continue ➡️</button>
               </>
             )}
@@ -565,6 +665,24 @@ const Wallet: React.FC = () => {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {showEarningsInfo && (
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-[2.5rem] p-6 shadow-2xl text-center">
+            <div className="w-14 h-14 bg-blue-600/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Info size={24} className="text-blue-400" />
+            </div>
+            <h3 className="text-xl font-black mb-2">Earnings Breakdown</h3>
+            <p className="text-xs text-gray-400 mb-6">Creator earnings are calculated from engagement, marketplace sales, and community tips.</p>
+            <div className="space-y-3 text-left text-xs text-gray-300 mb-6">
+              <p>• Social Engagement: Rewards for likes, comments, and recommendations.</p>
+              <p>• Market Sales: Payouts for products sold in GIGAMarket.</p>
+              <p>• Community Tips: Direct support from followers.</p>
+            </div>
+            <button onClick={() => setShowEarningsInfo(false)} className="w-full bg-white text-black font-black py-3 rounded-2xl">Got it</button>
           </div>
         </div>
       )}
