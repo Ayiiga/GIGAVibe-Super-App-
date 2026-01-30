@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Product } from '../types';
-import { ShoppingCart, Heart, TrendingUp, Play, Zap, Star, BadgeCheck, Shield, CheckCircle, Plus, Image as ImageIcon, Sparkles, X, Wand2, Loader2, Flame } from 'lucide-react';
+import { ShoppingCart, Heart, TrendingUp, Play, Zap, Star, BadgeCheck, Shield, CheckCircle, Plus, Image as ImageIcon, Sparkles, X, Wand2, Loader2, Flame, MapPin, FileText, Upload } from 'lucide-react';
 import { gemini } from '../services/geminiService';
 
 const MOCK_PRODUCTS: (Product & { isVideo?: boolean })[] = [
@@ -59,6 +59,15 @@ const Marketplace: React.FC = () => {
   const [buyingProduct, setBuyingProduct] = useState<Product | null>(null);
   const [isSelling, setIsSelling] = useState(false);
   const [viralBoost, setViralBoost] = useState(false);
+  const [isBusinessRegistered, setIsBusinessRegistered] = useState(false);
+  const [showBusinessReg, setShowBusinessReg] = useState(false);
+  const [showTracking, setShowTracking] = useState(false);
+  
+  // Business Registration State
+  const [bizName, setBizName] = useState('');
+  const [bizLocation, setBizLocation] = useState('');
+  const [bizIdCard, setBizIdCard] = useState<string | null>(null);
+  const [bizCert, setBizCert] = useState<string | null>(null);
   
   // Selling State
   const [productName, setProductName] = useState('');
@@ -88,7 +97,7 @@ const Marketplace: React.FC = () => {
     <div className="h-full bg-black flex flex-col pt-24 relative">
       <div className="p-4 flex-1 overflow-y-auto no-scrollbar pb-24">
         {/* Header */}
-        <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-4xl font-black italic tracking-tighter">GIGAMarket</h2>
             <div className="flex items-center gap-2 mt-1">
@@ -98,12 +107,27 @@ const Marketplace: React.FC = () => {
               </div>
             </div>
           </div>
-          <button 
-            onClick={() => setIsSelling(true)}
-            className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded-full font-black text-sm hover:bg-gray-200 transition-colors shadow-lg active:scale-95"
-          >
-            <span className="shrink-0"><Plus size={16} /></span> Sell
-          </button>
+          <div className="flex gap-2">
+            <button 
+                onClick={() => setShowTracking(true)}
+                className="bg-white/10 text-white p-2 rounded-full hover:bg-white/20 transition-colors"
+                title="Track Orders"
+            >
+                <TrendingUp size={20} />
+            </button>
+            <button 
+                onClick={() => {
+                if (isBusinessRegistered) {
+                    setIsSelling(true);
+                } else {
+                    setShowBusinessReg(true);
+                }
+                }}
+                className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded-full font-black text-sm hover:bg-gray-200 transition-colors shadow-lg active:scale-95"
+            >
+                <span className="shrink-0"><Plus size={16} /></span> Sell
+            </button>
+          </div>
         </div>
 
         <div className="flex gap-3 overflow-x-auto no-scrollbar mb-8">
@@ -204,6 +228,112 @@ const Marketplace: React.FC = () => {
           })}
         </div>
       </div>
+
+      {/* Business Registration Modal */}
+      {showBusinessReg && (
+        <div className="absolute inset-0 z-[60] bg-[#0a0a0a] flex flex-col items-center animate-in slide-in-from-bottom duration-300 overflow-y-auto">
+             <div className="w-full flex justify-between items-center p-6 border-b border-white/10 bg-black/50 backdrop-blur-md sticky top-0 z-10">
+                <h2 className="text-lg font-black">Seller Registration 🤝</h2>
+                <button onClick={() => setShowBusinessReg(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20"><X size={20} /></button>
+             </div>
+             <div className="w-full max-w-md p-6 space-y-6">
+                <div className="bg-blue-600/10 p-4 rounded-2xl border border-blue-600/20 flex gap-3">
+                    <ShieldCheck className="text-blue-500 shrink-0" size={24} />
+                    <p className="text-xs text-blue-200">To prevent fraud and ensure quality, all sellers must verify their business identity. 🛡️</p>
+                </div>
+
+                <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase ml-2 mb-1.5 block">Business Name 🏢</label>
+                    <input 
+                        type="text" 
+                        value={bizName}
+                        onChange={(e) => setBizName(e.target.value)}
+                        placeholder="e.g. GIGA Tech Solutions"
+                        className="w-full bg-white/5 p-4 rounded-xl border border-white/10 focus:border-blue-500 focus:outline-none font-bold text-white"
+                    />
+                </div>
+
+                <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase ml-2 mb-1.5 block">Location (Google Maps) 📍</label>
+                    <div className="flex gap-2">
+                        <input 
+                            type="text" 
+                            value={bizLocation}
+                            onChange={(e) => setBizLocation(e.target.value)}
+                            placeholder="Search location..."
+                            className="flex-1 bg-white/5 p-4 rounded-xl border border-white/10 focus:border-blue-500 focus:outline-none text-white"
+                        />
+                        <button className="bg-white/10 p-4 rounded-xl hover:bg-white/20"><MapPin size={24} /></button>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="aspect-video bg-white/5 rounded-2xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center gap-2 hover:bg-white/10 cursor-pointer" onClick={() => setBizIdCard('uploaded')}>
+                        {bizIdCard ? <CheckCircle className="text-green-500" size={32} /> : <Upload className="text-gray-500" size={32} />}
+                        <span className="text-[10px] font-bold uppercase text-gray-500">Upload ID Card 🪪</span>
+                    </div>
+                    <div className="aspect-video bg-white/5 rounded-2xl border-2 border-dashed border-white/20 flex flex-col items-center justify-center gap-2 hover:bg-white/10 cursor-pointer" onClick={() => setBizCert('uploaded')}>
+                         {bizCert ? <CheckCircle className="text-green-500" size={32} /> : <FileText className="text-gray-500" size={32} />}
+                        <span className="text-[10px] font-bold uppercase text-gray-500">Business Cert 📜</span>
+                    </div>
+                </div>
+
+                <button 
+                    onClick={() => {
+                        if (bizName && bizLocation && bizIdCard && bizCert) {
+                            setIsBusinessRegistered(true);
+                            setShowBusinessReg(false);
+                            setIsSelling(true);
+                            alert("Verification Successful! You can now sell. 🎉");
+                        } else {
+                            alert("Please complete all fields to verify. ⚠️");
+                        }
+                    }}
+                    className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-blue-500 transition-colors mt-4"
+                >
+                    Submit for Verification ✅
+                </button>
+             </div>
+        </div>
+      )}
+
+      {/* Tracking Modal */}
+      {showTracking && (
+        <div className="absolute inset-0 z-[60] bg-[#0a0a0a] flex flex-col animate-in slide-in-from-bottom duration-300">
+             <div className="w-full flex justify-between items-center p-6 border-b border-white/10 bg-black/50 backdrop-blur-md">
+                <h2 className="text-lg font-black">Track Order 📦</h2>
+                <button onClick={() => setShowTracking(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20"><X size={20} /></button>
+             </div>
+             <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                 <div className="bg-white/5 rounded-3xl p-6 border border-white/10">
+                    <div className="flex gap-4 mb-6">
+                        <img src="https://picsum.photos/seed/drone/100" className="w-16 h-16 rounded-xl object-cover bg-black" alt="product" />
+                        <div>
+                            <h3 className="font-bold text-lg">Pro Camera Drone</h3>
+                            <p className="text-sm text-gray-400">Order #GIGA-8829</p>
+                            <span className="text-xs font-black text-green-500 uppercase tracking-widest mt-1 block">In Transit 🚚</span>
+                        </div>
+                    </div>
+                    
+                    <div className="relative pl-4 space-y-8 border-l-2 border-white/10 ml-2">
+                        {[
+                            { title: 'Order Placed', time: '10:00 AM', active: true },
+                            { title: 'Seller Confirmed', time: '10:30 AM', active: true },
+                            { title: 'Picked up by Courier', time: '01:15 PM', active: true },
+                            { title: 'Arrived at Sorting Hub', time: '04:45 PM', active: true },
+                            { title: 'Out for Delivery', time: 'Pending', active: false },
+                        ].map((step, idx) => (
+                            <div key={idx} className="relative">
+                                <div className={`absolute -left-[21px] top-0 w-4 h-4 rounded-full border-2 border-[#0a0a0a] ${step.active ? 'bg-blue-500' : 'bg-gray-700'}`} />
+                                <h4 className={`text-sm font-bold ${step.active ? 'text-white' : 'text-gray-500'}`}>{step.title}</h4>
+                                <p className="text-[10px] text-gray-500 font-mono">{step.time}</p>
+                            </div>
+                        ))}
+                    </div>
+                 </div>
+             </div>
+        </div>
+      )}
 
       {/* Selling Modal */}
       {isSelling && (
