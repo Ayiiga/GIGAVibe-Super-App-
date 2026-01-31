@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <title>GIGAVibe - Live Production Node</title>
   
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="/manifest.json">
   
   <script>
     // Global Deployment State
@@ -60,20 +60,9 @@
     }
     .live-glow { animation: pulse-blue 2s infinite; }
   </style>
-<script type="importmap">
-{
-  "imports": {
-    "recharts": "https://esm.sh/recharts@^3.7.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
-  }
-}
-</script>
 </head>
 <body class="bg-black text-white">
   <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
 </body>
 </html>
