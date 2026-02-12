@@ -16,10 +16,12 @@ const MOCK_DATA = [
 
 const Wallet: React.FC = () => {
   const [isLocked, setIsLocked] = useState(true);
+  const [userPin, setUserPin] = useState(() => localStorage.getItem('giga_wallet_pin') || '1234');
   const [pin, setPin] = useState('');
   const [isShaking, setIsShaking] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'success'>('idle');
+  const [changePinMode, setChangePinMode] = useState(false);
   
   // Withdrawal State
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
@@ -43,7 +45,16 @@ const Wallet: React.FC = () => {
       
       if (newPin.length === 4) {
         setTimeout(() => {
-          if (newPin === '1234') {
+          if (changePinMode) {
+             localStorage.setItem('giga_wallet_pin', newPin);
+             setUserPin(newPin);
+             setChangePinMode(false);
+             setPin('');
+             alert("PIN Changed Successfully! 🔐");
+             return;
+          }
+
+          if (newPin === userPin) {
             setIsLocked(false);
             setPin('');
           } else {
@@ -130,6 +141,8 @@ const Wallet: React.FC = () => {
 
   const handleResetComplete = () => {
       if (newPinEntry.length === 4) {
+        localStorage.setItem('giga_wallet_pin', newPinEntry);
+        setUserPin(newPinEntry);
         alert("PIN Updated Successfully! ✅");
         setForgotPinStep('idle');
         setPin('');
@@ -316,15 +329,35 @@ const Wallet: React.FC = () => {
           </button>
         </div>
 
-        <button 
-          onClick={() => setForgotPinStep('method')} 
-          className="mt-6 flex items-center gap-2 text-sm font-bold text-blue-500 hover:text-blue-400 transition-colors px-4 py-2 rounded-full hover:bg-blue-500/10"
-        >
-          <KeyRound size={16} />
-          Forgot PIN? 🤔
-        </button>
-      </div>
-    );
+          <button 
+            onClick={() => setForgotPinStep('method')} 
+            className="mt-6 flex items-center gap-2 text-sm font-bold text-blue-500 hover:text-blue-400 transition-colors px-4 py-2 rounded-full hover:bg-blue-500/10"
+          >
+            <KeyRound size={16} />
+            Forgot PIN? 🤔
+          </button>
+        </div>
+      );
+    }
+  } else if (changePinMode) {
+     return (
+        <div className="h-full bg-black flex flex-col items-center justify-center p-8 relative z-50">
+             <button onClick={() => { setChangePinMode(false); setPin(''); }} className="absolute top-8 left-8 p-2 bg-white/10 rounded-full text-white"><ArrowLeft size={24}/></button>
+             <h2 className="text-2xl font-black mb-2">Set New PIN 🆕</h2>
+             <p className="text-gray-400 mb-8 text-center text-sm">Enter your new 4-digit PIN.</p>
+             <div className="flex gap-6 mb-12">
+                {[...Array(4)].map((_, i) => (
+                    <div key={i} className={`w-4 h-4 rounded-full border-2 ${i < pin.length ? 'bg-blue-500 border-blue-400' : 'bg-white/10 border-white/20'}`} />
+                ))}
+             </div>
+             <div className="grid grid-cols-3 gap-6 w-full max-w-xs">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(n => (
+                    <button key={n} onClick={() => handlePinEnter(n.toString())} className={`h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xl font-bold ${n === 0 ? 'col-start-2' : ''}`}>{n}</button>
+                ))}
+                 <button onClick={() => setPin(prev => prev.slice(0, -1))} className="flex items-center justify-center text-gray-500 col-start-3 row-start-4"><Delete /></button>
+             </div>
+        </div>
+     );
   }
 
   return (
@@ -334,9 +367,14 @@ const Wallet: React.FC = () => {
            <ShieldCheck size={24} className="text-green-500" />
            <h2 className="text-3xl font-black tracking-tighter">GIGACapital 🏦</h2>
         </div>
-        <div className="flex items-center gap-2 bg-yellow-500/20 border border-yellow-500/50 px-4 py-2 rounded-2xl shadow-[0_0_15px_rgba(234,179,8,0.2)]">
-          <Zap size={16} className="text-yellow-500 fill-yellow-500" />
-          <span className="text-sm font-black text-yellow-500 tracking-tighter">GIGA SCORE: 842 ✨</span>
+        <div className="flex items-center gap-2">
+            <button onClick={() => { setChangePinMode(true); setPin(''); }} className="bg-white/10 p-2 rounded-full hover:bg-white/20" title="Change PIN">
+                <KeyRound size={16} className="text-gray-300" />
+            </button>
+            <div className="flex items-center gap-2 bg-yellow-500/20 border border-yellow-500/50 px-4 py-2 rounded-2xl shadow-[0_0_15px_rgba(234,179,8,0.2)]">
+            <Zap size={16} className="text-yellow-500 fill-yellow-500" />
+            <span className="text-sm font-black text-yellow-500 tracking-tighter">GIGA SCORE: 842 ✨</span>
+            </div>
         </div>
       </div>
 

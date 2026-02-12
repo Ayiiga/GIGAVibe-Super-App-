@@ -9,7 +9,8 @@ import {
   Gamepad2, RefreshCw, FlipHorizontal, UserCircle2, Settings, ShieldAlert, 
   BadgeCheck, Disc, Play, Pause, Search as SearchIcon, Radio, Share, 
   Link as LinkIcon, Instagram, MessageSquare, Mail, Download, CheckCircle2,
-  UserRoundPlus, UserRoundCheck, Check, Smile, RefreshCcw, Tag, Rocket, TrendingUp
+  UserRoundPlus, UserRoundCheck, Check, Smile, RefreshCcw, Tag, Rocket, TrendingUp,
+  Clock, Mic
 } from 'lucide-react';
 import { gemini } from '../services/geminiService';
 import LiveHost from './LiveHost';
@@ -88,6 +89,7 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [showBoostModal, setShowBoostModal] = useState<string | null>(null);
   const [boostBudget, setBoostBudget] = useState(25);
+  const [boostDuration, setBoostDuration] = useState(3);
   const [newCommentText, setNewCommentText] = useState('');
   const [showCamera, setShowCamera] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState<string | null>(null); 
@@ -214,7 +216,7 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
 
   const handleBoostSubmit = () => {
     setPosts(prev => prev.map(p => p.id === showBoostModal ? { ...p, isBoostedPost: true } : p));
-    showFeedback(`Post Boosted! Estimated reach: ${(boostBudget * 125).toLocaleString()} vibes 🚀`);
+    showFeedback(`Post Boosted for ${boostDuration} days! Estimated reach: ${(boostBudget * 125 * boostDuration).toLocaleString()} vibes 🚀`);
     setShowBoostModal(null);
   };
 
@@ -365,26 +367,41 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
                <div className="space-y-6 mb-10">
                   <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
                      <div className="flex justify-between items-center mb-4">
-                        <span className="text-sm font-bold text-gray-400">Ad Budget (GH₵)</span>
-                        <span className="text-2xl font-black text-white">GH₵ {boostBudget}</span>
+                        <span className="text-sm font-bold text-gray-400">Ad Budget ($/Day)</span>
+                        <span className="text-2xl font-black text-white">${boostBudget}</span>
                      </div>
                      <input 
                        type="range" 
-                       min="5" 
-                       max="500" 
-                       step="5"
+                       min="1" 
+                       max="100" 
+                       step="1"
                        value={boostBudget}
                        onChange={(e) => setBoostBudget(parseInt(e.target.value))}
+                       className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-yellow-500 mb-6"
+                     />
+                     
+                     <div className="flex justify-between items-center mb-4">
+                        <span className="text-sm font-bold text-gray-400">Duration (Days)</span>
+                        <span className="text-2xl font-black text-white">{boostDuration} Days</span>
+                     </div>
+                     <input 
+                       type="range" 
+                       min="1" 
+                       max="30" 
+                       step="1"
+                       value={boostDuration}
+                       onChange={(e) => setBoostDuration(parseInt(e.target.value))}
                        className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-yellow-500"
                      />
-                     <div className="flex justify-between mt-4">
+
+                     <div className="flex justify-between mt-8">
                         <div className="text-center flex-1 border-r border-white/5">
-                           <p className="text-xl font-black text-blue-400">{(boostBudget * 125).toLocaleString()}</p>
+                           <p className="text-xl font-black text-blue-400">{(boostBudget * 125 * boostDuration).toLocaleString()}</p>
                            <p className="text-[8px] text-gray-500 uppercase font-black">Est. Reach</p>
                         </div>
                         <div className="text-center flex-1">
-                           <p className="text-xl font-black text-purple-400">3 Days</p>
-                           <p className="text-[8px] text-gray-500 uppercase font-black">Duration</p>
+                           <p className="text-xl font-black text-purple-400">${boostBudget * boostDuration}</p>
+                           <p className="text-[8px] text-gray-500 uppercase font-black">Total Cost</p>
                         </div>
                      </div>
                   </div>
@@ -430,9 +447,20 @@ const SocialFeed: React.FC<SocialFeedProps> = ({ onRemix, onShop }) => {
            </button>
            
            <button onClick={() => { fileInputRef.current?.click(); setIsMenuOpen(false); }} className="bg-purple-600 text-white p-5 rounded-full shadow-2xl flex items-center gap-3 active:scale-90 transition-transform border border-purple-400/20">
-              <span className="text-[11px] font-black uppercase tracking-widest mr-1">Gallery 📁</span>
+              <span className="text-[11px] font-black uppercase tracking-widest mr-1">Upload 📁</span>
               <Upload size={24}/>
            </button>
+
+           <div className="flex gap-2">
+             <button onClick={() => { alert("Story Mode! 📖"); setIsMenuOpen(false); }} className="bg-pink-600 text-white p-4 rounded-full shadow-2xl active:scale-90 transition-transform border border-pink-400/20">
+                <span className="sr-only">Story</span>
+                <Clock size={20}/>
+             </button>
+             <button onClick={() => { alert("Audio Mode! 🎵"); setIsMenuOpen(false); }} className="bg-green-600 text-white p-4 rounded-full shadow-2xl active:scale-90 transition-transform border border-green-400/20">
+                <span className="sr-only">Audio</span>
+                <Mic size={20}/>
+             </button>
+           </div>
         </div>
       )}
 

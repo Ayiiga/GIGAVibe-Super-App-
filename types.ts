@@ -4,18 +4,44 @@ export enum TabType {
   CHATS = 'CHATS',
   MARKETPLACE = 'MARKETPLACE',
   AI_LAB = 'AI_LAB',
-  WALLET = 'WALLET'
+  WALLET = 'WALLET',
+  ORDERS = 'ORDERS'
+}
+
+export interface BusinessProfile {
+  businessName: string;
+  location: {
+    address: string;
+    lat: number;
+    lng: number;
+  };
+  idCardUrl: string;
+  businessCertUrl: string;
+  isVerified: boolean;
+}
+
+export interface Order {
+  id: string;
+  productId: string;
+  productName: string;
+  productImage: string;
+  price: number;
+  status: 'processing' | 'shipped' | 'delivered';
+  trackingNumber?: string;
+  estimatedDelivery: string;
 }
 
 export interface Post {
   id: string;
   username: string;
   avatar: string;
-  contentUrl: string;
+  contentUrl?: string;
+  audioUrl?: string;
   caption: string;
   likes: number;
   comments: number;
   shares: number;
+  type?: 'image' | 'video' | 'audio' | 'story' | 'text';
 }
 
 export interface ChatMessage {
