@@ -3,9 +3,9 @@
   "short_name": "GIGAVibe",
   "name": "GIGAVibe Super App",
   "description": "The only app you need for your social, financial, and digital life. Chat, post, sell, pay, create — GIGA it.",
-  "id": ".",
-  "start_url": "index.html",
-  "scope": ".",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#000000",
@@ -49,3 +49,4 @@
     }
   ]
 }
+

@@ -62,7 +62,7 @@ const App: React.FC = () => {
 
     // 3. Service Worker
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW Error:', e));
+      navigator.serviceWorker.register('/sw.js').catch(e => console.warn('SW Error:', e));
     }
 
     return () => {

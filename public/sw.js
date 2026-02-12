@@ -1,8 +1,9 @@
 
 const CACHE_NAME = 'gigavibe-tecno-v1.0.7';
 const urlsToCache = [
-  'index.html',
-  'manifest.json'
+  '/',
+  '/index.html',
+  '/manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
@@ -42,7 +43,7 @@ self.addEventListener('fetch', (event) => {
           });
           return response;
         }).catch(() => {
-          if (event.request.mode === 'navigate') return caches.match('index.html');
+          if (event.request.mode === 'navigate') return caches.match('/index.html');
         });
       })
   );
@@ -51,3 +52,4 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
+
