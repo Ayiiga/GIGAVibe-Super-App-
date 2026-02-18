@@ -1,8 +1,16 @@
+
 {
-  "name": "GIGAVibe Super App",
-  "description": "Founded by Ayiiga Benard Issaka, GIGA (Intelligent Global Arena) is the world’s first AI-driven Super-App designed to unify how we communicate, create, and transact.",
+  "name": "Giga3 AI",
+  "description": "A premium, multi-modal Intelligence Engine offering creative, academic, and viral content generation, developed by Ayiiga Benard Issaka.",
+  "enable_javascript": true,
+  "enable_swipe_to_refresh": true,
+  "add_internet_permission": true,
+  "enable_installs_statistics": true,
+  "display_navigate_progress": true,
+  "enable_user_agent": true,
   "requestFramePermissions": [
     "camera",
-    "microphone"
+    "microphone",
+    "geolocation"
   ]
 }
