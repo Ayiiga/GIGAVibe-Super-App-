@@ -1,295 +1,154 @@
 
 import React, { useState } from 'react';
+import { Mail, Phone, Globe, ShieldCheck, ArrowRight, Loader2, Zap } from 'lucide-react';
+import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { auth, googleProvider, isNeuralLinkActive } from '../firebase';
 
 interface AuthViewProps {
   onLogin: () => void;
 }
 
-type AuthMethod = 'email' | 'phone' | 'google';
-
 const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
-  const [method, setMethod] = useState<AuthMethod>('email');
-  const [isSignup, setIsSignup] = useState(false);
-  const [isForgotPassword, setIsForgotPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [method, setMethod] = useState<'INITIAL' | 'PHONE' | 'EMAIL'>('INITIAL');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    // Simulate API delay
-    setTimeout(() => {
-      setLoading(false);
-      onLogin();
-    }, 1500);
+  const handleGoogleLogin = async () => {
+    if (!isNeuralLinkActive) {
+      setError("Cloud Sync is currently in Local Mode. Use Founder Access below.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleSendOTP = () => {
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setOtpSent(true);
-    }, 1000);
+  const handleEmailAuth = async () => {
+    if (!isNeuralLinkActive) {
+      setError("Cloud Sync is currently in Local Mode. Use Founder Access below.");
+      return;
+    }
+    if (!email || !password) return;
+    setIsSubmitting(true);
+    setError('');
+    try {
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (loginErr: any) {
+        if (loginErr.code === 'auth/user-not-found') {
+          await createUserWithEmailAndPassword(auth, email, password);
+        } else {
+          throw loginErr;
+        }
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleResetPassword = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setResetEmailSent(true);
-    }, 1500);
+  // Skip auth for local development/sandbox
+  const enterSandbox = () => {
+    onLogin(); // App logic handles setting a local user if fbUser is null
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col md:flex-row bg-[#020617] overflow-hidden">
-      {/* Branding Side */}
-      <div className="hidden md:flex md:w-1/2 bg-gradient-to-br from-slate-900 to-black p-12 flex-col justify-between relative overflow-hidden">
-        <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-accent-gold/10 rounded-full blur-[100px]"></div>
-        <div className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-blue-500/5 rounded-full blur-[100px]"></div>
-        
-        <div className="relative z-10">
-          <div className="w-16 h-16 bg-accent-gold rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(251,191,36,0.3)] mb-8">
-            <span className="text-black font-black text-3xl">G</span>
-          </div>
-          <h1 className="font-outfit text-6xl font-black text-white leading-tight mb-6">
-            Giga3 AI <br /><span className="text-accent-gold">Intelligence</span> Engine.
-          </h1>
-          <p className="text-slate-400 text-lg max-w-md leading-relaxed">
-            The pinnacle of Ghanaian-led AI innovation. Access premium multi-modal creative tools, academic research, and viral content generation.
-          </p>
-        </div>
-
-        <div className="relative z-10">
-          <p className="text-slate-500 font-bold uppercase tracking-widest text-xs mb-4">Developed by</p>
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full border border-slate-700 overflow-hidden">
-               <img src="https://picsum.photos/40/40?seed=benard" alt="CEO" />
-            </div>
-            <div>
-              <p className="font-bold text-white">Ayiiga Benard Issaka</p>
-              <p className="text-xs text-slate-500">CEO & Founder, Giga3 AI</p>
-            </div>
-          </div>
-        </div>
+    <div className="flex flex-col h-screen bg-black items-center justify-center p-8 max-w-lg mx-auto border-x border-zinc-900">
+      <div className="w-24 h-24 rounded-[36px] bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center font-black text-4xl italic tracking-tighter shadow-2xl shadow-indigo-500/20 mb-8">
+        G
+      </div>
+      
+      <div className="text-center mb-12">
+        <h1 className="text-4xl font-black mb-3 italic tracking-tighter">GIGAVibe</h1>
+        <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em]">Intelligent Global Arena</p>
       </div>
 
-      {/* Auth Form Side */}
-      <div className="flex-1 flex items-center justify-center p-6 md:p-12">
-        <div className="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="text-center md:text-left">
-            <div className="md:hidden flex justify-center mb-6">
-              <div className="w-12 h-12 bg-accent-gold rounded-xl flex items-center justify-center text-black font-bold text-xl">G</div>
+      <div className="w-full space-y-4">
+        {method === 'INITIAL' ? (
+          <>
+            <AuthButton 
+              icon={<Globe size={20} className="text-blue-400" />} 
+              label={isSubmitting ? "Syncing..." : "Continue with Google"} 
+              onClick={handleGoogleLogin} 
+              disabled={isSubmitting}
+            />
+            <AuthButton icon={<Mail size={20} className="text-indigo-400" />} label="Email Arena Link" onClick={() => setMethod('EMAIL')} />
+            
+            <div className="relative py-4">
+               <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-zinc-900"></div></div>
+               <div className="relative flex justify-center text-[8px] font-black uppercase tracking-widest"><span className="bg-black px-4 text-zinc-700">Arena Gatekeeper</span></div>
             </div>
-            <h2 className="text-3xl font-black font-outfit text-white mb-2">
-              {isForgotPassword ? 'Reset Password' : (isSignup ? 'Create your account' : 'Welcome back')}
-            </h2>
-            <p className="text-slate-500">
-              {isForgotPassword ? "Enter your email to receive a reset link" : "Choose your preferred way to access Giga3 AI"}
-            </p>
-          </div>
 
-          {!isForgotPassword && (
-            <div className="grid grid-cols-3 gap-2 bg-slate-900/50 p-1 rounded-2xl border border-slate-800">
-              {[
-                { id: 'email', label: 'Email' },
-                { id: 'phone', label: 'Phone' },
-                { id: 'google', label: 'Google' }
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => {
-                    setMethod(t.id as AuthMethod);
-                    setOtpSent(false);
-                  }}
-                  className={`py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
-                    method === t.id ? 'bg-accent-gold text-black' : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="glass rounded-[32px] p-8 border-slate-800 shadow-2xl relative overflow-hidden">
-            {loading && (
-              <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px] z-20 flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-accent-gold border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            )}
-
-            {isForgotPassword ? (
-              <div className="space-y-4">
-                {!resetEmailSent ? (
-                  <form onSubmit={handleResetPassword} className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Email Address</label>
-                      <input 
-                        type="email" 
-                        required
-                        placeholder="name@company.com"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-sm focus:ring-1 ring-accent-gold outline-none transition-all"
-                      />
-                    </div>
-                    <button className="w-full bg-accent-gold hover:bg-yellow-500 text-black font-black py-4 rounded-2xl shadow-xl shadow-accent-gold/10 transition-all mt-4">
-                      Send Reset Link
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => setIsForgotPassword(false)}
-                      className="w-full text-center text-xs text-slate-400 font-bold hover:text-slate-200 mt-2"
-                    >
-                      Back to Sign In
-                    </button>
-                  </form>
-                ) : (
-                  <div className="text-center py-4">
-                    <div className="w-16 h-16 bg-accent-gold/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="size-8 text-accent-gold">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                      </svg>
-                    </div>
-                    <h3 className="font-bold text-white mb-2">Check your inbox</h3>
-                    <p className="text-xs text-slate-500 mb-6">We've sent a password reset link to your email address.</p>
-                    <button 
-                      onClick={() => {
-                        setIsForgotPassword(false);
-                        setResetEmailSent(false);
-                      }}
-                      className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-4 rounded-2xl transition-all"
-                    >
-                      Back to Login
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <>
-                {method === 'email' && (
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Email Address</label>
-                      <input 
-                        type="email" 
-                        required
-                        placeholder="name@company.com"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-sm focus:ring-1 ring-accent-gold outline-none transition-all"
-                      />
-                    </div>
-                    <div>
-                      <div className="flex justify-between items-center mb-2">
-                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Password</label>
-                        {!isSignup && (
-                          <button 
-                            type="button"
-                            onClick={() => setIsForgotPassword(true)}
-                            className="text-[10px] font-bold text-accent-gold hover:text-yellow-500"
-                          >
-                            Forgot Password?
-                          </button>
-                        )}
-                      </div>
-                      <input 
-                        type="password" 
-                        required
-                        placeholder="••••••••"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-sm focus:ring-1 ring-accent-gold outline-none transition-all"
-                      />
-                    </div>
-                    <button className="w-full bg-accent-gold hover:bg-yellow-500 text-black font-black py-4 rounded-2xl shadow-xl shadow-accent-gold/10 transition-all mt-6">
-                      {isSignup ? 'Create Account' : 'Sign In'}
-                    </button>
-                  </form>
-                )}
-
-                {method === 'phone' && (
-                  <div className="space-y-4">
-                    {!otpSent ? (
-                      <>
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Phone Number</label>
-                          <div className="flex gap-2">
-                            <div className="bg-slate-950 border border-slate-800 rounded-2xl px-4 py-4 text-sm text-slate-400 flex items-center gap-2">
-                              <span className="text-base">🇬🇭</span> +233
-                            </div>
-                            <input 
-                              type="tel" 
-                              placeholder="54 252 4252"
-                              className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl p-4 text-sm focus:ring-1 ring-accent-gold outline-none"
-                            />
-                          </div>
-                        </div>
-                        <button 
-                          onClick={handleSendOTP}
-                          className="w-full bg-accent-gold hover:bg-yellow-500 text-black font-black py-4 rounded-2xl shadow-xl shadow-accent-gold/10 transition-all"
-                        >
-                          Send Verification Code
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <div>
-                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Verification Code</label>
-                          <input 
-                            type="text" 
-                            maxLength={6}
-                            placeholder="Enter 6-digit code"
-                            className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center text-xl font-bold tracking-[0.5em] focus:ring-1 ring-accent-gold outline-none"
-                          />
-                          <p className="text-center text-xs text-slate-500 mt-4">Didn't receive code? <button className="text-accent-gold font-bold">Resend</button></p>
-                        </div>
-                        <button 
-                          onClick={handleSubmit as any}
-                          className="w-full bg-accent-gold hover:bg-yellow-500 text-black font-black py-4 rounded-2xl shadow-xl shadow-accent-gold/10 transition-all"
-                        >
-                          Verify & Continue
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {method === 'google' && (
-                  <div className="text-center py-6">
-                    <button 
-                      onClick={handleSubmit as any}
-                      className="w-full bg-white text-black font-bold py-4 rounded-2xl flex items-center justify-center gap-3 hover:bg-slate-100 transition-all shadow-xl"
-                    >
-                      <svg className="w-5 h-5" viewBox="0 0 24 24">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                      </svg>
-                      Continue with Google
-                    </button>
-                    <p className="text-xs text-slate-500 mt-8 leading-relaxed">
-                      By continuing, you agree to Giga3 AI's <br />
-                      <span className="text-slate-400 underline cursor-pointer">Terms of Service</span> and <span className="text-slate-400 underline cursor-pointer">Privacy Policy</span>.
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          <div className="text-center">
             <button 
-              onClick={() => {
-                setIsSignup(!isSignup);
-                setIsForgotPassword(false);
-              }}
-              className="text-sm font-medium text-slate-400 hover:text-accent-gold transition-colors"
+              onClick={enterSandbox}
+              className="w-full flex items-center justify-center gap-3 py-6 bg-zinc-900/50 border border-indigo-500/20 rounded-[28px] text-[10px] font-black uppercase tracking-widest text-indigo-400 hover:bg-indigo-600/10 transition-all active:scale-95"
             >
-              {isSignup ? 'Already have an account? Sign In' : "Don't have an account? Create one"}
+              <Zap size={16} /> Enter via Founder Sandbox
             </button>
+          </>
+        ) : (
+          <div className="bg-zinc-900/50 border border-zinc-800 p-8 rounded-[40px] animate-in fade-in slide-in-from-right-4">
+            <h3 className="text-xl font-black italic mb-6 uppercase tracking-tighter">{method === 'EMAIL' ? 'Neural Email Link' : 'Phone Verification'}</h3>
+            
+            <input 
+              type="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Arena ID (Email)"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl p-5 text-sm mb-4 outline-none focus:ring-1 focus:ring-indigo-500 text-white font-bold italic"
+            />
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Security Key (Password)"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl p-5 text-sm mb-6 outline-none focus:ring-1 focus:ring-indigo-500 text-white font-bold italic"
+            />
+
+            {error && <p className="text-[10px] text-red-500 font-black uppercase tracking-widest mb-4 italic text-center">{error}</p>}
+
+            <button 
+              onClick={handleEmailAuth}
+              disabled={isSubmitting}
+              className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-3 hover:bg-indigo-500 active:scale-95 transition-all shadow-xl shadow-indigo-900/20"
+            >
+              {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : <>Initialize Session <ArrowRight size={18} /></>}
+            </button>
+            <button onClick={() => setMethod('INITIAL')} className="w-full text-zinc-600 text-[9px] font-black uppercase tracking-widest mt-6 hover:text-white">Back to Portal</button>
           </div>
+        )}
+      </div>
+
+      <div className="mt-12 text-center">
+        <div className="flex items-center justify-center gap-2 text-zinc-600 mb-4">
+          <ShieldCheck size={14} />
+          <span className="text-[10px] font-black uppercase tracking-widest">GIGAVibe Ecosystem Protected</span>
         </div>
+        <p className="text-[9px] text-zinc-500 max-w-xs leading-relaxed uppercase font-black tracking-widest opacity-40">
+          Founder: Ayiiga Benard
+        </p>
       </div>
     </div>
   );
 };
+
+const AuthButton: React.FC<{ icon: React.ReactNode; label: string; onClick: () => void; disabled?: boolean }> = ({ icon, label, onClick, disabled }) => (
+  <button 
+    onClick={onClick}
+    disabled={disabled}
+    className="w-full flex items-center gap-4 bg-zinc-900 border border-zinc-800 p-6 rounded-[28px] hover:bg-zinc-800 transition-all active:scale-95 group disabled:opacity-50"
+  >
+    <div className="p-3 bg-zinc-800 rounded-2xl group-hover:bg-zinc-700">{icon}</div>
+    <span className="font-black italic tracking-tight text-white flex-1 text-left">{label}</span>
+  </button>
+);
 
 export default AuthView;
