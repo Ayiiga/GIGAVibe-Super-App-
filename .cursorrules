@@ -1,0 +1,229 @@
+# GIGAVibe Super App - Cursor Agent Configuration
+
+## Project Overview
+GIGAVibe is an AI-driven Super-App built with React 19 and TypeScript, featuring social media, messaging, marketplace, AI creation tools, and digital wallet functionality. It uses Google Gemini API for AI features and is deployed as a Progressive Web App (PWA).
+
+## Tech Stack
+- **Frontend Framework**: React 19 with TypeScript
+- **Styling**: Tailwind CSS (via CDN)
+- **Icons**: Lucide React
+- **Charts**: Recharts
+- **AI/ML**: Google Gemini API (@google/genai)
+- **Build Tool**: Vite 6
+- **Deployment**: PWA with Service Worker
+
+## Code Style Guidelines
+
+### TypeScript Conventions
+- Use functional components with explicit TypeScript interfaces for props
+- Define interfaces for all component props at the top of the file
+- Use enums for fixed sets of values (see `types.ts` for examples)
+- Prefer `const` over `let` where possible
+- Use template literals for string interpolation
+
+### React Patterns
+- Use React hooks (useState, useEffect, useRef) for state management
+- Define component props interfaces directly above the component
+- Export components as default exports
+- Use destructuring for props in function parameters
+- Keep components focused and single-purpose
+
+### Component Structure
+```typescript
+import React, { useState, useEffect } from 'react';
+import { IconName } from 'lucide-react';
+
+interface ComponentNameProps {
+  propName: PropType;
+  optionalProp?: OptionalType;
+}
+
+const ComponentName: React.FC<ComponentNameProps> = ({ propName, optionalProp }) => {
+  // State declarations
+  const [state, setState] = useState<StateType>(initialValue);
+
+  // Effects
+  useEffect(() => {
+    // Effect logic
+  }, [dependencies]);
+
+  // Event handlers
+  const handleEvent = () => {
+    // Handler logic
+  };
+
+  // Render
+  return (
+    <div className="tailwind-classes">
+      {/* Component content */}
+    </div>
+  );
+};
+
+export default ComponentName;
+```
+
+### Styling Guidelines
+- Use Tailwind CSS utility classes exclusively
+- Follow mobile-first responsive design
+- Use consistent spacing: `p-4`, `p-6`, `gap-2`, `gap-3`, `mb-6`
+- Use consistent border radius: `rounded-full`, `rounded-2xl`, `rounded-3xl`, `rounded-[2rem]`
+- Apply glassmorphism effects with `bg-white/5`, `bg-white/10`, `backdrop-blur-md`
+- Use gradient backgrounds: `bg-gradient-to-r from-blue-600 to-purple-600`
+- Dark theme colors: `bg-black`, `text-white`, `text-gray-400`, `border-white/10`
+
+### Animation Classes
+- Entry animations: `animate-in`, `fade-in`, `zoom-in`, `slide-in-from-bottom-8`
+- Duration: `duration-300`, `duration-500`
+- Interactive states: `active:scale-90`, `active:scale-95`, `hover:bg-white/10`
+- Loading states: `animate-spin`, `animate-pulse`, `animate-ping`
+
+## File Organization
+```
+/workspace/
+├── App.tsx              # Main app component with routing and auth
+├── index.tsx            # React DOM render entry
+├── index.html           # HTML template with PWA config
+├── types.ts             # Shared TypeScript types and enums
+├── components/          # Feature components
+│   ├── AILab.tsx        # AI creation tools
+│   ├── Auth.tsx         # Authentication flow
+│   ├── ChatInterface.tsx
+│   ├── LiveHost.tsx
+│   ├── Marketplace.tsx
+│   ├── Navbar.tsx
+│   ├── NotificationSystem.tsx
+│   ├── Onboarding.tsx
+│   ├── Profile.tsx
+│   ├── SocialFeed.tsx
+│   └── Wallet.tsx
+├── services/
+│   └── geminiService.ts # Google Gemini API integration
+├── manifest.json        # PWA manifest
+├── sw.js                # Service worker
+├── vite.config.ts       # Vite configuration
+└── tsconfig.json        # TypeScript configuration
+```
+
+## Google Gemini API Usage
+
+### API Key Configuration
+- API key is accessed via `process.env.API_KEY` (defined in vite.config.ts)
+- Environment variable source: `GEMINI_API_KEY`
+
+### Model Selection Guidelines
+- **Text Generation**: `gemini-3-flash-preview` - For captions, descriptions, analysis
+- **Image Generation**: `gemini-2.5-flash-image` - For visual content creation
+- **Video Generation**: `veo-3.1-fast-generate-preview` - For video content
+- **Live Audio**: `gemini-2.5-flash-native-audio-preview-12-2025` - For transcription
+
+### API Patterns
+```typescript
+// Text generation
+const response = await this.ai.models.generateContent({
+  model: 'gemini-3-flash-preview',
+  contents: promptString,
+  config: {
+    temperature: 0.7,
+    thinkingConfig: { thinkingBudget: 0 } // For fast responses
+  }
+});
+
+// Image generation with optional input image
+const response = await this.ai.models.generateContent({
+  model: 'gemini-2.5-flash-image',
+  contents: { parts: [{ text: prompt }, /* optional image part */] },
+  config: {
+    imageConfig: { aspectRatio: "1:1" }
+  }
+});
+
+// Video generation (async with polling)
+let operation = await ai.models.generateVideos({
+  model: 'veo-3.1-fast-generate-preview',
+  prompt: prompt,
+  config: {
+    numberOfVideos: 1,
+    resolution: '720p',
+    aspectRatio: '9:16' // or '16:9'
+  }
+});
+```
+
+## PWA Guidelines
+- Service worker registered in `App.tsx`
+- Install prompt captured via `beforeinstallprompt` event
+- Standalone mode detected with `(display-mode: standalone)` media query
+- PWA manifest in `manifest.json` with icons and screenshots
+
+## Important Considerations
+
+### Mobile-First Design
+- All components designed for mobile viewport (`max-w-lg mx-auto`)
+- Touch-friendly targets with adequate padding
+- Safe area handling with `pt-12` for header, `pb-32` for footer
+- Overflow handling with `no-scrollbar` class
+
+### State Management
+- Local component state with `useState`
+- Persistent data stored in `localStorage` (auth, onboarding status)
+- Cross-component communication via props and callbacks
+
+### Error Handling
+- Wrap async operations in try-catch blocks
+- Provide fallback content for failed operations
+- Log errors to console for debugging
+- Show user-friendly error messages
+
+### Performance
+- Use `useRef` for values that shouldn't trigger re-renders
+- Implement proper cleanup in `useEffect` return functions
+- Avoid unnecessary re-renders with proper dependency arrays
+
+## Common Patterns
+
+### Tab Types
+```typescript
+enum TabType {
+  SOCIAL = 'SOCIAL',
+  CHATS = 'CHATS',
+  MARKETPLACE = 'MARKETPLACE',
+  AI_LAB = 'AI_LAB',
+  WALLET = 'WALLET'
+}
+```
+
+### Authentication Check
+```typescript
+const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+  return localStorage.getItem('gigavibe_auth') === 'true';
+});
+```
+
+### Loading States
+```typescript
+{loading ? (
+  <Loader2 className="animate-spin" />
+) : (
+  <ActionIcon />
+)}
+```
+
+## Avoid These Patterns
+- Do not use class components
+- Do not use inline styles (use Tailwind instead)
+- Do not hardcode API keys in source code
+- Do not use `var` for variable declarations
+- Do not create separate CSS files (use Tailwind utilities)
+- Do not use `any` type unless absolutely necessary
+
+## Testing Considerations
+- Components should be self-contained for easy testing
+- API calls should be isolated in the services directory
+- Use meaningful variable and function names for readability
+
+## Git Commit Guidelines
+- Use conventional commit format: `type: description`
+- Types: `feat`, `fix`, `refactor`, `style`, `docs`, `chore`
+- Keep commits focused and atomic
+- Write clear, descriptive commit messages
